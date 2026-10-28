@@ -65,6 +65,9 @@ test('REAL PostgreSQL concurrent starts, finish retry, points, claims and redemp
   assert.equal((await pool.query("SELECT COUNT(*)::int AS count FROM audit_events WHERE action='redeem' AND object_id=$1",[row.id])).rows[0].count,1);
   const offer2=(await pool.query(`INSERT INTO offers(title,merchant,details,city,cost_points,max_claims,is_demo,state,ends_at)
    VALUES('Expired test','Test merchant','not real','Sacramento',0,1,TRUE,'active',NOW()+INTERVAL '1 hour') RETURNING id`)).rows[0].id;
+  // Fixture only: grant this test merchant access to the expiry-test offer.
+  // Production merchant scope stays unchanged.
+  await pool.query('INSERT INTO merchant_access(user_id,offer_id) VALUES($1,$2)',[merchant,offer2]);
   const second=await claimOffer(runner,offer2);
   await pool.query("UPDATE offers SET ends_at=NOW()-INTERVAL '1 second' WHERE id=$1",[offer2]);
   const v2=(await pool.query('SELECT encrypted_code FROM vouchers WHERE id=$1',[second.voucherId])).rows[0];
