@@ -1,4 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
+import {randomBytes} from "node:crypto";
 import {database,transaction} from "@/server/db";
 import type {GPSPoint} from "@/domain/gps";
 import {startRecording,finishRecording,abandonRecording,recordingStatus} from "@/server/activity-service";
