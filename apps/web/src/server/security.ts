@@ -1,18 +1,24 @@
-import {randomBytes,createHash,createHmac,scryptSync,timingSafeEqual,createCipheriv,createDecipheriv} from "node:crypto";
+import {randomBytes,createHash,createHmac,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from "node:crypto";
 import {NextRequest,NextResponse} from "next/server";
+import {promisify} from "node:util";
+const asyncScrypt=promisify(scrypt);
 import {database} from "./db";
 function secret():string {
  const s=process.env.APP_SECRET;
  if(!s||s.length<32)throw new Error("APP_SECRET must be at least 32 characters");
  return s;
 }
-export function hashPassword(pass:string):string{
+export async function hashPassword(pass:string):Promise<string>{
  const salt=randomBytes(16).toString("hex");
- return salt+":"+scryptSync(pass,salt,64).toString("hex");
+ const derived=await asyncScrypt(pass,salt,64) as Buffer;
+ return salt+":"+derived.toString("hex");
 }
-export function validPassword(pass:string,stored:string):boolean{
- try{const [salt,key]=stored.split(":");const a=Buffer.from(key,"hex"),b=scryptSync(pass,salt,a.length);return timingSafeEqual(a,b)}
- catch{return false}
+export async function validPassword(pass:string,stored:string):Promise<boolean>{
+ try{const [salt,key]=stored.split(":");const a=Buffer.from(key,"hex");
+  if(a.length!==64||!salt||salt.length!==32)return false;
+  const b=await asyncScrypt(pass,salt,a.length) as Buffer;
+  return timingSafeEqual(a,b);
+ }catch{return false}
 }
 const key=()=>createHash("sha256").update(secret()).digest();
 export function opaqueToken():string{return randomBytes(32).toString("base64url")}

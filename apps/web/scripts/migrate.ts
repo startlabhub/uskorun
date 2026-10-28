@@ -6,6 +6,7 @@ if(!url) throw new Error("DATABASE_URL required");
 const pool=new Pool({connectionString:url});
 try{
   await pool.query(readFileSync(join(process.cwd(),"scripts/schema.sql"),"utf8"));
+  await pool.query(readFileSync(join(process.cwd(),"scripts/sprint-2-migration.sql"),"utf8"));
   await pool.query(`INSERT INTO challenges (title,city,details,target_miles,ends_at)
     SELECT 'Sacramento Moves Together','Greater Sacramento',
       'Demo citywide goal. Run or walk to help the community move 10,000 miles. No sponsored prize is promised.',10000,NOW()+INTERVAL '90 days'

@@ -2,12 +2,15 @@
 import {useEffect,useRef,useState} from "react";
 import {QRCodeSVG} from "qrcode.react";
 import {assessGPS,GPSPoint} from "@/domain/gps";
+import {newPendingRun,withStartedId,withPause,withResume,withFix,withPendingFinish,readPendingRun,writePendingRun,clearPendingRun} from "@/domain/pending";
+import type {PendingRun} from "@/domain/pending";
+import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-handoff";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
 type Challenge={id:string;title:string;city:string;details:string;target_miles:number;ends_at:string;progress_miles:number;active_people:number};
 type Offer={id:string;title:string;merchant:string;city:string;details:string;cost_points:number;is_demo:boolean;claimed:number;max_claims:number};
 type Team={id:string;name:string;city:string;invite_code:string;members:number;miles:number};
 type Voucher={id:string;state:string;title:string;merchant:string;is_demo:boolean;code:string;issued_at:string};
-type Activity={id:string;kind:string;distance_miles:number;status:string;reason:string;started_at:string};
+type Activity={id:string;client_id:string;kind:string;distance_miles:number;status:string;reason:string;started_at:string};
 type Data={user:User|null;challenges:Challenge[];offers:Offer[];teams:Team[];vouchers:Voucher[];activities:Activity[];points:number;myChallenges:string[];myTeam:string|null};
 const empty:Data={user:null,challenges:[],offers:[],teams:[],vouchers:[],activities:[],points:0,myChallenges:[],myTeam:null};
 type Tab="home"|"challenges"|"track"|"rewards"|"teams"|"profile"|"merchant";
@@ -20,14 +23,42 @@ export default function Home(){
  const [liveMiles,setLiveMiles]=useState(0),[gpsNote,setGpsNote]=useState("Ready to record"),[fixCount,setFixCount]=useState(0);
  const [teamName,setTeamName]=useState(""),[teamCode,setTeamCode]=useState(""),[redeemCode,setRedeemCode]=useState("");
  const points=useRef<GPSPoint[]>([]),watch=useRef<number|null>(null),activity=useRef<string|null>(null),wake=useRef<any>(null);
+ const [busy,setBusy]=useState(false),busyRef=useRef(false);
+ const [pendingRecovery,setPendingRecovery]=useState<PendingRun|null>(null);
+ const draftRef=useRef<PendingRun|null>(null),watchEpoch=useRef(0);
+ function saveDraft(d:PendingRun|null){
+  draftRef.current=d;setPendingRecovery(d);
+  if(d){try{writePendingRun(sessionStorage,d)}catch{setGpsNote('Storage unavailable: do not close tab before finish')}}
+  else{try{clearPendingRun(sessionStorage)}catch{}}
+ }
+
  async function refresh(){
   try{const r=await fetch("/api/data",{cache:"no-store"});if(!r.ok)throw new Error("Data service unavailable");
-   setData(await r.json());
+   const json=await r.json();setData(json);
+   // Recovery when browser storage was cleared but the server still has a recording.
+   const orphan=json.user && json.activities?.find((a:any)=>a.status==='recording');
+   if(orphan&&!draftRef.current){
+    const recovered=withPause(withStartedId(newPendingRun(orphan.client_id,orphan.kind),orphan.id));
+    saveDraft(recovered);activity.current=recovered.activityId;points.current=[];
+    setTracking(false);setPaused(true);setTab('track');
+    setGpsNote('Server recording recovered without GPS samples. Resume a new segment or abandon.');
+   }
   }catch(e:any){setProblem(e.message||"Connection failed")}finally{setLoading(false)}
  }
- useEffect(()=>{refresh();const code=new URLSearchParams(window.location.search).get("redeem");
-  if(code){setRedeemCode(code);setTab("merchant")}
-  return()=>{if(watch.current!==null)navigator.geolocation?.clearWatch(watch.current);wake.current?.release?.()};
+ useEffect(()=>{
+  refresh();
+  // QR bearer token is in URL fragment only; clear immediately from history.
+  const code=parseAndScrubVoucherFragment(window.location,window.history);
+  if(code){setRedeemCode(code);setTab('merchant')}
+  const old=readPendingRun(sessionStorage);
+  if(old){const paused=old.phase==='recording'?withPause(old):old;
+   saveDraft(paused);activity.current=paused.activityId;points.current=paused.points;
+   setPaused(true);setTracking(false);setGpsNote('Previous run recovered. Resume, retry finish, or abandon.');}
+  const onHidden=()=>{if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording')pause()};
+  document.addEventListener('visibilitychange',onHidden);
+  window.addEventListener('pagehide',onHidden);
+  return()=>{document.removeEventListener('visibilitychange',onHidden);window.removeEventListener('pagehide',onHidden);
+   if(watch.current!==null)navigator.geolocation?.clearWatch(watch.current);wake.current?.release?.()};
  },[]);
  async function act(action:string,payload:any={}){
   setProblem("");setNotice("");
@@ -41,33 +72,84 @@ export default function Home(){
   if(r){setPassword("");setTab("home");setNotice("Welcome to USKORUN!")}
  }
  const geoloc=(navigatorAvailable:boolean)=>navigatorAvailable&&"geolocation" in navigator;
- function clearWatch(){if(watch.current!==null&&geoloc(typeof navigator!=="undefined"))navigator.geolocation.clearWatch(watch.current);watch.current=null;wake.current?.release?.();wake.current=null}
+ function clearWatch(){
+  watchEpoch.current++;
+  if(watch.current!==null&&geoloc(typeof navigator!=="undefined"))navigator.geolocation.clearWatch(watch.current);
+  watch.current=null;wake.current?.release?.();wake.current=null;
+ }
  function observe(){
-  if(!geoloc(typeof navigator!=="undefined")){setProblem("This browser has no GPS geolocation");return}
+  if(!geoloc(typeof navigator!=="undefined")){setProblem('This browser has no GPS');return}
+  const epoch=++watchEpoch.current;
   watch.current=navigator.geolocation.watchPosition(({coords,timestamp})=>{
-   const p={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
-   if(p.accuracy>50){setGpsNote("Weak GPS signal; this segment may not count");return}
-   points.current.push(p);setFixCount(points.current.length);
-   const track=assessGPS(points.current,kind,points.current[0].t-1000,Date.now()+1000);
-   setLiveMiles(track.miles);
-   setGpsNote("GPS connected · accuracy ±"+Math.round(p.accuracy)+"m");
-  },(err)=>setGpsNote("GPS interrupted: "+err.message),{enableHighAccuracy:true,maximumAge:0,timeout:15000});
-  // Optional screen wake lock: never a substitute for native background GPS.
-  try{(navigator as any).wakeLock?.request("screen").then((lock:any)=>wake.current=lock).catch(()=>{})}catch{}
+   if(epoch!==watchEpoch.current||draftRef.current?.phase!=='recording')return;
+   if(document.visibilityState==='hidden'){pause();return}
+   const raw={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
+   if(raw.accuracy>50){setGpsNote('Weak GPS: segment not counted');return}
+   try{
+    const updated=withFix(draftRef.current,raw);
+    saveDraft(updated);points.current=updated.points;setFixCount(points.current.length);
+    const track=assessGPS(points.current,updated.kind,points.current[0].t-1000,Date.now()+1000);
+    setLiveMiles(track.miles);setGpsNote('GPS accuracy ±'+Math.round(raw.accuracy)+'m');
+   }catch(e:any){setGpsNote(e.message);pause()}
+  },(err)=>{setGpsNote('GPS interrupted: '+err.message);pause()},
+  {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+  try{(navigator as any).wakeLock?.request('screen').then((lock:any)=>wake.current=lock).catch(()=>{})}catch{}
  }
  async function start(){
-  if(!geoloc(typeof navigator!=="undefined")){setProblem("GPS unavailable");return}
-  const id=crypto.randomUUID(),r=await act("start",{kind,clientId:id});
-  if(!r)return;
-  activity.current=r.activityId;points.current=[];setLiveMiles(0);setFixCount(0);setTracking(true);setPaused(false);setGpsNote("Acquiring GPS…");observe();
+  if(busyRef.current||tracking||draftRef.current?.phase==='pending_finish')return;
+  if(!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');return}
+  busyRef.current=true;setBusy(true);
+  try{
+   // Reuse the SAME clientId if start previously timed out after being accepted by server.
+   const current=draftRef.current||newPendingRun(crypto.randomUUID(),kind);
+   saveDraft(current);
+   const r=await act('start',{kind:current.kind,clientId:current.clientId});
+   if(!r){setGpsNote('Start not confirmed. Retry with same tracking ID.');return}
+   if(r.status!=='recording'){saveDraft(null);setGpsNote('Session was already finalized.');return}
+   const started=withStartedId(current,r.activityId);saveDraft(started);
+   activity.current=started.activityId;points.current=started.points;
+   setLiveMiles(0);setFixCount(points.current.length);setTracking(true);setPaused(false);observe();
+  }finally{busyRef.current=false;setBusy(false)}
  }
- function pause(){clearWatch();setPaused(true);setGpsNote("Paused — no distance is recorded")}
- function resume(){setPaused(false);setGpsNote("Reconnecting GPS…");observe()}
+ function pause(){
+  clearWatch();const d=draftRef.current;
+  if(d?.phase==='recording')saveDraft(withPause(d));
+  setTracking(false);setPaused(true);setGpsNote('Paused — no movement recorded until resumed');
+ }
+ function resume(){
+  const d=draftRef.current;
+  if(!d||!d.activityId||d.phase!=='paused'||busyRef.current)return;
+  const next=withResume(d);saveDraft(next);setTracking(true);setPaused(false);
+  setGpsNote('Reconnecting GPS…');observe();
+ }
  async function stop(){
-  clearWatch();setTracking(false);setPaused(false);
-  const r=await act("finish",{activityId:activity.current,points:points.current});
-  activity.current=null;points.current=[];
-  if(r){setNotice(r.status==="accepted"?`Recorded ${mi(r.miles)} mi. Check your points and challenge progress.`:`Session not credited: ${r.reason}`);setTab("profile")}
+  if(busyRef.current)return;
+  clearWatch();setTracking(false);setPaused(true);
+  const d=draftRef.current;if(!d?.activityId){setGpsNote('Retry Start first to recover server ID');return}
+  const frozen=withPendingFinish(d);saveDraft(frozen);
+  busyRef.current=true;setBusy(true);
+  try{
+   const r=await act('finish',{activityId:frozen.activityId,points:frozen.points});
+   if(!r||!['accepted','rejected','review','abandoned'].includes(r.status)){
+    setGpsNote('Finish not confirmed. GPS data saved in this tab — Retry Finish.');return;
+   }
+   saveDraft(null);points.current=[];activity.current=null;
+   setNotice(r.status==='accepted'?`Recorded ${mi(r.miles)} mi.`:`Session not credited: ${r.reason}`);
+   setTab('profile');
+  }finally{busyRef.current=false;setBusy(false)}
+ }
+ async function abandon(){
+  const d=draftRef.current;if(!d||busyRef.current)return;
+  busyRef.current=true;setBusy(true);
+  try{
+   // If first start response was lost, replay exact clientId to recover server ID.
+   let id=d.activityId;
+   if(!id){const r=await act('start',{kind:d.kind,clientId:d.clientId});if(!r)return;id=r.activityId;}
+   const r=await act('abandon',{activityId:id});
+   if(!r)return;
+   clearWatch();saveDraft(null);activity.current=null;points.current=[];
+   setTracking(false);setPaused(false);setNotice('Run closed with status: '+r.status);
+  }finally{busyRef.current=false;setBusy(false)}
  }
  async function share(text:string,url:string){
   try{if(navigator.share)await navigator.share({title:"USKORUN",text,url});
@@ -123,8 +205,14 @@ export default function Home(){
      <div className="tabs" style={{justifyContent:"center"}}><button disabled={tracking} className={kind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={tracking} className={kind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
      <div className="track-circle"><div className="stat">{liveMiles.toFixed(2)}</div><div className="muted small">MILES · provisional</div></div>
      <p style={{textAlign:"center",marginBottom:15}} className="small muted">{gpsNote} · {fixCount} fixes</p>
-     <div className="track-control">{!tracking?<button className="btn" onClick={start}>▶ Start {kind}</button>:<><button className="btn secondary" onClick={paused?resume:pause}>{paused?"▶ Resume":"Ⅱ Pause"}</button><button className="btn danger" onClick={stop}>■ Finish</button></>}</div>
-     <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Locked-screen or background mileage may be lost and will never be recreated. Server checks route plausibility; GPS alone cannot prove real physical activity.</div>
+     <div className="track-control">
+      {pendingRecovery?.phase==='pending_finish'?<><button disabled={busy} className="btn" onClick={stop}>Retry Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
+       !tracking&&pendingRecovery?.phase==='starting'?<><button disabled={busy} className="btn" onClick={start}>Retry Start</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
+       !tracking&&pendingRecovery?.phase==='paused'?<><button disabled={busy} className="btn secondary" onClick={resume}>▶ Resume</button><button disabled={busy} className="btn" onClick={stop}>Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
+       !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
+       <><button disabled={busy} className="btn secondary" onClick={pause}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
+     </div>
+     <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Locked-screen or background mileage may be lost and will never be recreated. Raw GPS samples remain in this browser tab sessionStorage for failed Finish recovery until success or Abandon. Server checks plausibility; GPS cannot prove physical activity.</div>
     </div>
     <div className="section"><h2>How points work</h2></div>
     <div className="grid two"><div className="card"><div className="stat">15</div><div className="stat-label">Beta points / accepted running mile</div></div><div className="card"><div className="stat">10</div><div className="stat-label">Beta points / accepted walking mile</div></div></div>
@@ -135,7 +223,7 @@ export default function Home(){
     <div className="section"><h2>My vouchers</h2></div>
     {!data.vouchers.length&&<div className="card"><p className="muted">No vouchers yet. Record an accepted activity to earn beta points.</p></div>}
     <div className="grid two">{data.vouchers.map(v=><div className="card" key={v.id}><div className="row"><h3>{v.title}</h3><span className="pill demo">{v.state}</span></div><p className="small muted">{v.merchant} · {v.is_demo?"Demo only":"Offer"}</p><div className="space"/>
-      {v.state==="issued"?<><div className="qr"><QRCodeSVG size={140} value={typeof window!=="undefined"?window.location.origin+"/?redeem="+encodeURIComponent(v.code):v.code}/></div><div className="space"/><p className="code">{v.code}</p><p className="tiny muted">QR and code represent the same one-time voucher. Staff must log in to redeem.</p></>:<p className="muted small">Voucher already used or revoked.</p>}
+      {v.state==="issued"?<><div className="qr"><QRCodeSVG size={140} value={typeof window!=="undefined"?window.location.origin+"/"+voucherFragment(v.code):v.code}/></div><div className="space"/><p className="code">{v.code}</p><p className="tiny muted">QR and code represent the same one-time voucher. Staff must log in to redeem.</p></>:<p className="muted small">Voucher already used or revoked.</p>}
      </div>)}</div>
    </>}
    {tab==="teams"&&<><div className="section"><div><span className="eyebrow">COMMUNITY</span><h2>Find your people</h2></div></div>
@@ -146,7 +234,7 @@ export default function Home(){
     <p className="tiny muted" style={{marginTop:10}}>Joining a new team affects only future miles. Existing contributions remain with their original team.</p>
    </>}
    {tab==="profile"&&<><div className="section"><div><span className="eyebrow">PROFILE</span><h2>Your journey</h2></div></div><div className="card"><p className="small muted">{me.email}</p><div className="space"/><div className="grid two"><div><div className="stat">{data.points}</div><p className="muted small">Current balance</p></div><div><div className="stat">{mi(data.activities.filter(a=>a.status==="accepted").reduce((sum,a)=>sum+a.distance_miles,0))}</div><p className="muted small">Accepted miles</p></div></div><div className="space"/><button className="btn secondary small" onClick={()=>share("Move with me on USKORUN!",invite())}>Invite a friend ↗</button></div>
-    <div className="section"><h2>Recent activity</h2></div><div className="stack">{data.activities.length?data.activities.map(a=><div className="card row" key={a.id}><div><h3>{a.kind==="run"?"🏃 Run":"🚶 Walk"} · {mi(a.distance_miles)} mi</h3><p className="tiny muted">{new Date(a.started_at).toLocaleDateString()} · {a.reason}</p></div><span className={"pill "+(a.status!=="accepted"?"demo":"")}>{a.status}</span></div>):<div className="card muted">No activities yet. Start moving!</div>}</div><div className="space"/><button className="btn danger small" onClick={async()=>{if(await act("logout")){setTab("home");setNotice("Signed out")}}}>Sign out</button>
+    <div className="section"><h2>Recent activity</h2></div><div className="stack">{data.activities.length?data.activities.map(a=><div className="card row" key={a.id}><div><h3>{a.kind==="run"?"🏃 Run":"🚶 Walk"} · {mi(a.distance_miles)} mi</h3><p className="tiny muted">{new Date(a.started_at).toLocaleDateString()} · {a.reason}</p></div><span className={"pill "+(a.status!=="accepted"?"demo":"")}>{a.status}</span></div>):<div className="card muted">No activities yet. Start moving!</div>}</div><div className="space"/><button className="btn danger small" onClick={async()=>{if(await act("logout")){clearWatch();saveDraft(null);setTab("home");setNotice("Signed out")}}}>Sign out</button>
    </>}
    {tab==="merchant"&&<><div className="section"><div><span className="eyebrow">PARTNER VERIFICATION</span><h2>Redeem a one-time reward</h2></div></div><div className="card auth-box"><p className="small muted">Requires an assigned merchant or operator account. The first redemption consumes the reward permanently; QR and typed code cannot both be used.</p><div className="space"/><div className="form"><label className="field">Voucher code<input value={redeemCode} onChange={e=>setRedeemCode(e.target.value)} placeholder="Enter code from runner"/></label><button className="btn" onClick={async()=>{const r=await act("redeem",{code:redeemCode});if(r){setRedeemCode("");setNotice(r.title+" redeemed successfully"+(r.is_demo?" (DEMO ONLY)":""))}}}>Confirm redemption</button></div></div></>}
   </>}

@@ -22,7 +22,7 @@ export async function GET(req:NextRequest){
   const data:any={user,challenges:challenges.rows,offers:offers.rows,teams:teams.rows,activities:[],vouchers:[],points:0,myChallenges:[],myTeam:null};
   if(user){
    const [a,v,p,e,t]=await Promise.all([
-    db.query("SELECT id,kind,distance_miles::float,started_at,status,reason FROM activities WHERE user_id=$1 ORDER BY started_at DESC LIMIT 25",[user.id]),
+    db.query("SELECT id,client_id,kind,distance_miles::float,started_at,status,reason FROM activities WHERE user_id=$1 ORDER BY started_at DESC LIMIT 25",[user.id]),
     db.query(`SELECT v.id,v.state,v.issued_at,v.redeemed_at,v.encrypted_code,o.title,o.merchant,o.is_demo
       FROM vouchers v JOIN offers o ON o.id=v.offer_id WHERE v.user_id=$1 ORDER BY v.issued_at DESC LIMIT 30`,[user.id]),
     db.query("SELECT COALESCE(SUM(delta),0)::int AS balance FROM points_ledger WHERE user_id=$1",[user.id]),

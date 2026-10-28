@@ -1,0 +1,148 @@
+TAP version 13
+# Subtest: reject huge password before expensive scrypt path
+ok 1 - reject huge password before expensive scrypt path
+  ---
+  duration_ms: 1.114206
+  type: 'test'
+  ...
+# Subtest: no coercion of object passwords and emails
+ok 2 - no coercion of object passwords and emails
+  ---
+  duration_ms: 0.17125
+  type: 'test'
+  ...
+# Subtest: signup enforces minimum length, login allows legacy shorter stored password
+ok 3 - signup enforces minimum length, login allows legacy shorter stored password
+  ---
+  duration_ms: 0.155897
+  type: 'test'
+  ...
+# Subtest: rate window and cap deterministic
+ok 4 - rate window and cap deterministic
+  ---
+  duration_ms: 0.17821
+  type: 'test'
+  ...
+# Subtest: 1 Hz running and walking regression retained
+ok 5 - 1 Hz running and walking regression retained
+  ---
+  duration_ms: 3.547224
+  type: 'test'
+  ...
+# Subtest: 5 Hz sampling gap-free run remains valid
+ok 6 - 5 Hz sampling gap-free run remains valid
+  ---
+  duration_ms: 0.223596
+  type: 'test'
+  ...
+# Subtest: 30s pause, 60m displacement is NEVER bridged
+ok 7 - 30s pause, 60m displacement is NEVER bridged
+  ---
+  duration_ms: 0.312255
+  type: 'test'
+  ...
+# Subtest: very short 2s pause bridge does not count displacement
+ok 8 - very short 2s pause bridge does not count displacement
+  ---
+  duration_ms: 0.252418
+  type: 'test'
+  ...
+# Subtest: app background/visibility interruption requires incremented segment
+ok 9 - app background/visibility interruption requires incremented segment
+  ---
+  duration_ms: 0.285206
+  type: 'test'
+  ...
+# Subtest: 120s missing GPS samples never bridge gap
+ok 10 - 120s missing GPS samples never bridge gap
+  ---
+  duration_ms: 0.234552
+  type: 'test'
+  ...
+# Subtest: duplicate timestamps and implausible jumps do not earn
+ok 11 - duplicate timestamps and implausible jumps do not earn
+  ---
+  duration_ms: 0.217297
+  type: 'test'
+  ...
+# Subtest: stationary GPS jitter does not earn
+ok 12 - stationary GPS jitter does not earn
+  ---
+  duration_ms: 0.30848
+  type: 'test'
+  ...
+# Subtest: out-of-order segment is rejected and not bridged
+ok 13 - out-of-order segment is rejected and not bridged
+  ---
+  duration_ms: 0.427123
+  type: 'test'
+  ...
+# Subtest: demo earning coefficients are not sponsor economics
+ok 14 - demo earning coefficients are not sponsor economics
+  ---
+  duration_ms: 0.412151
+  type: 'test'
+  ...
+# Subtest: GPS timestamps outside server recording window cannot be reused
+ok 15 - GPS timestamps outside server recording window cannot be reused
+  ---
+  duration_ms: 0.181976
+  type: 'test'
+  ...
+# Subtest: silent 30-second 60-meter gap in same segment fails closed
+ok 16 - silent 30-second 60-meter gap in same segment fails closed
+  ---
+  duration_ms: 0.163519
+  type: 'test'
+  ...
+# Subtest: pause/resume increments GPS segment even for 2s pause
+ok 17 - pause/resume increments GPS segment even for 2s pause
+  ---
+  duration_ms: 0.992939
+  type: 'test'
+  ...
+# Subtest: failed finish preserves activityId, same gps and pending phase
+ok 18 - failed finish preserves activityId, same gps and pending phase
+  ---
+  duration_ms: 0.586295
+  type: 'test'
+  ...
+# Subtest: lost response after commit is safely resolved by same idempotent retry
+ok 19 - lost response after commit is safely resolved by same idempotent retry
+  ---
+  duration_ms: 0.181235
+  type: 'test'
+  ...
+# Subtest: recover draft from session storage without prematurely erasing points
+ok 20 - recover draft from session storage without prematurely erasing points
+  ---
+  duration_ms: 0.868667
+  type: 'test'
+  ...
+# Subtest: recording cannot add GPS samples while pending finish
+ok 21 - recording cannot add GPS samples while pending finish
+  ---
+  duration_ms: 0.178651
+  type: 'test'
+  ...
+# Subtest: QR code never uses server-bound ?redeem query parameter
+ok 22 - QR code never uses server-bound ?redeem query parameter
+  ---
+  duration_ms: 0.931669
+  type: 'test'
+  ...
+# Subtest: voucher fragment immediately removed from address after consumption
+ok 23 - voucher fragment immediately removed from address after consumption
+  ---
+  duration_ms: 0.327888
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 286.489015
