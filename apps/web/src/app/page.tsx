@@ -243,19 +243,40 @@ export default function Home(){
    </div>
   </>:<>
    {tab==="home"&&<>
-    <section className="hero"><span className="eyebrow">GREATER SACRAMENTO · YOUR CITY MOVES</span><h1>Move more.<br/><span style={{color:"var(--lime)"}}>Earn more.</span></h1>
-      <p>Your next run or walk helps your team and your city. Every verified foreground mile counts.</p>
-      <button className="btn" onClick={()=>setTab("track")}>Start moving →</button></section>
-    <div className="grid" style={{marginTop:14}}>
-     <div className="card"><div className="stat">{data.points}</div><div className="stat-label">Beta points</div></div>
-     <div className="card"><div className="stat">{data.activities.filter(x=>x.status==="accepted").length}</div><div className="stat-label">Accepted activities</div></div>
-     <div className="card"><div className="stat">{data.myChallenges.length}</div><div className="stat-label">Joined challenges</div></div>
+    <section className="hero"><span className="eyebrow">GREATER SACRAMENTO · YOUR CITY MOVES</span><h1>Walk. Run.<br/><span style={{color:"var(--lime)"}}>Earn demo points.</span></h1>
+      <p>Movement is recorded in the foreground. Earn demo points only when the server accepts your finished activity.</p>
+      <div className="row wrap"><button className="btn" onClick={()=>setTab("track")}>{hasOpenActivity?"Return to tracking →":"Start moving →"}</button>
+        <button className="btn outline" onClick={()=>setTab("challenges")}>Choose goal</button><button className="btn outline" onClick={()=>setTab("rewards")}>Reward shop</button></div>
+    </section>
+    <div className="card accent" style={{marginTop:16}} aria-label="Activity and points">
+      <div className="row wrap"><h2>{hasOpenActivity?(sessionKind==="run"?"Current run":"Current walk"):"Choose your movement"}</h2>
+       <span className="pill">{pendingRecovery?.phase==="recording"?"FOREGROUND RECORDING":pendingRecovery?"INTERRUPTED / SAVED":"READY"}</span></div>
+      {!pendingRecovery&&<div className="tabs" style={{marginTop:15}}>
+       <button className={kind==="walk"?"active":""} onClick={()=>{setKind("walk");setTab("track")}}>Walk →</button>
+       <button className={kind==="run"?"active":""} onClick={()=>{setKind("run");setTab("track")}}>Run →</button>
+      </div>}
+      <div className="grid" style={{marginTop:16}}>
+       <div><div className="stat">{hasOpenActivity?liveMiles.toFixed(2):"0.00"}</div><p className="stat-label">Foreground miles · provisional</p></div>
+       <div><div className="stat">{hasOpenActivity?estimatedPoints:0}</div><p className="stat-label">Est. session points · NOT spendable</p></div>
+       <div><div className="stat">{data.points}</div><p className="stat-label">Confirmed balance · shop eligible</p></div>
+      </div>
+      <p className="small muted" style={{marginTop:16}}>{hasOpenActivity?preliminaryPointsNote(sessionKind,liveMiles):"Start a walk or run to see an estimate."} No estimate is credited until Finish and server acceptance; minimum 0.03 mi, per-session limit 75 and daily limit 150 points apply.</p>
+      {hasOpenActivity&&<div className="row wrap" style={{marginTop:14}}><span className="small muted">{pendingRecovery?.phase==="recording"?"Keep app visible while moving.":pendingRecovery?.phase==="pending_finish"?"Finish not confirmed — Retry Finish in Track.":"Recording paused. Resume explicitly in Track."}</span><button className="btn secondary small" onClick={()=>setTab("track")}>Open Track →</button></div>}
     </div>
-    <div className="section"><h2>Citywide mission</h2><button className="btn secondary small" onClick={()=>setTab("challenges")}>Explore →</button></div>
+    <div className="grid two" style={{marginTop:16}}>
+      <div className="card"><div className="row"><h3>Your goal</h3><span className="pill">{joinedGoal?"JOINED":"CHOOSE"}</span></div>
+       <p className="small muted" style={{marginTop:9}}>{joinedGoal?joinedGoal.title:"Join an available community challenge."}</p>
+       {joinedGoal&&<><div className="progress"><div style={{width:Math.min(100,Number(joinedGoal.progress_miles)/Number(joinedGoal.target_miles)*100)+"%"}}/></div>
+       <p className="tiny muted">{mi(Number(joinedGoal.progress_miles))} / {mi(Number(joinedGoal.target_miles))} verified city miles</p></>}
+       <div className="space"/><button className="btn secondary small" onClick={()=>setTab("challenges")}>Choose goal →</button></div>
+      <div className="card"><div className="row"><h3>Next demo reward</h3><span className="pill demo">DEMO ONLY</span></div>
+       <p className="small muted" style={{marginTop:9}}>{nextReward?data.offers.find(o=>o.id===nextReward.offer.id)?.title||"Demo reward":"Shop fixtures not yet seeded."}</p>
+       <div className="stat" style={{marginTop:12}}>{nextReward?nextReward.remaining:"—"}</div>
+       <p className="small muted">{nextReward?(nextReward.remaining===0?"Ready to claim with confirmed balance":"More CONFIRMED points needed"):"No available demo offer"}</p>
+       <div className="space"/><button className="btn secondary small" onClick={()=>setTab("rewards")}>Reward shop →</button></div>
+    </div>
+    <div className="section"><h2>Citywide mission</h2><button className="btn secondary small" onClick={()=>setTab("challenges")}>View goals →</button></div>
     {data.challenges.slice(0,1).map(c=><ChallengeCard key={c.id} c={c} joined={data.myChallenges.includes(c.id)} onJoin={()=>act("joinChallenge",{id:c.id})}/>)}
-    <div className="section"><h2>Why we move</h2></div>
-    <div className="grid two"><div className="card"><h3>Better together</h3><p className="muted small">Invite people into your team and unlock shared milestones.</p><div className="space"/><button className="btn secondary small" onClick={()=>setTab("teams")}>Explore teams</button></div>
-    <div className="card"><h3>Real neighborhood value</h3><p className="muted small">Discover the reward system as we onboard verified local partners.</p><div className="space"/><button className="btn secondary small" onClick={()=>setTab("rewards")}>See rewards</button></div></div>
    </>}
    {tab==="challenges"&&<><div className="section"><div><span className="eyebrow">CHALLENGES</span><h2>Move your community</h2></div></div>
     <div className="stack">{data.challenges.map(c=><ChallengeCard key={c.id} c={c} joined={data.myChallenges.includes(c.id)} onJoin={()=>act("joinChallenge",{id:c.id})}/>)}</div>
