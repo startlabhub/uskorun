@@ -306,12 +306,29 @@ export default function Home(){
     <div className="grid two"><div className="card"><div className="stat">15</div><div className="stat-label">Beta points / accepted running mile</div></div><div className="card"><div className="stat">10</div><div className="stat-label">Beta points / accepted walking mile</div></div></div>
     <p className="small muted" style={{marginTop:12}}>Provisional non-cash beta rules. Accuracy filters, daily caps and manual reviews may change. Rewards here are demonstrations, not real partner promises.</p>
    </>}
-   {tab==="rewards"&&<><div className="section"><div><span className="eyebrow">YOUR REWARDS</span><h2>Movement pays forward</h2></div><div className="pill">{data.points} points</div></div>
-    <div className="grid two">{data.offers.map(o=><div className="card" key={o.id}><div className="row"><span className="pill demo">{o.is_demo?"DEMO ONLY":"PARTNER OFFER"}</span><span className="tiny muted">{o.city}</span></div><div className="space"/><h3>{o.title}</h3><p className="small muted">{o.merchant}</p><p className="small" style={{marginTop:12}}>{o.details}</p><div className="line"/><div className="row"><strong>{o.cost_points} points</strong><button className="btn small" disabled={data.points<o.cost_points||o.claimed>=o.max_claims} onClick={async()=>{const r=await act("claim",{offerId:o.id});if(r)setNotice("Demo voucher issued. See your wallet below.")}}>Claim →</button></div></div>)}</div>
-    <div className="section"><h2>My vouchers</h2></div>
-    {!data.vouchers.length&&<div className="card"><p className="muted">No vouchers yet. Record an accepted activity to earn beta points.</p></div>}
-    <div className="grid two">{data.vouchers.map(v=><div className="card" key={v.id}><div className="row"><h3>{v.title}</h3><span className="pill demo">{v.state}</span></div><p className="small muted">{v.merchant} · {v.is_demo?"Demo only":"Offer"}</p><div className="space"/>
-      {v.state==="issued"?<><div className="qr"><QRCodeSVG size={140} value={typeof window!=="undefined"?window.location.origin+"/"+voucherFragment(v.code):v.code}/></div><div className="space"/><p className="code">{v.code}</p><p className="tiny muted">QR and code represent the same one-time voucher. Staff must log in to redeem.</p></>:<p className="muted small">Voucher already used or revoked.</p>}
+   {tab==="rewards"&&<><div className="section"><div><span className="eyebrow">DEMO REWARD SHOP</span><h2>Move. Earn. Exchange.</h2></div><div className="pill">{data.points} confirmed points</div></div>
+    <div className="alert" role="note" style={{marginBottom:16}}><strong>DEMO ONLY — fictional partner offers.</strong> These are not real discounts or products. Only points from server-accepted finished activities can be spent. Live session estimates do not enter the wallet.</div>
+    <div className="grid two">{data.offers.map(o=>{
+      const wasClaimed=data.vouchers.some(v=>v.offer_id===o.id);
+      const needed=remainingConfirmedPoints(data.points,o.cost_points);
+      const soldOut=o.claimed>=o.max_claims;
+      const eligible=canClaimDemoOffer(data.points,o,wasClaimed);
+      return <div className="card" key={o.id}>
+       <div className="row wrap"><span className="pill demo">DEMO ONLY</span><span className="tiny muted">{o.city}</span></div>
+       <div className="space"/><h3>{o.title}</h3><p className="small muted" style={{marginTop:5}}>{o.merchant}</p>
+       <p className="small" style={{marginTop:12}}>{o.details}</p>
+       <div className="line"/>
+       <div className="row"><strong>{o.cost_points} confirmed points</strong><span className="tiny muted">{Math.max(0,o.max_claims-o.claimed)} / {o.max_claims} available</span></div>
+       <div className="progress"><div style={{width:(o.cost_points>0?Math.min(100,Math.max(0,data.points)/o.cost_points*100):100)+"%"}}/></div>
+       <p className="small muted">{wasClaimed?"Already claimed by this account":soldOut?"Demo inventory exhausted":needed>0?"Need "+needed+" more confirmed points":"Confirmed balance sufficient"}</p>
+       <div className="space"/><button className="btn small" disabled={!eligible} onClick={async()=>{const r=await act("claim",{offerId:o.id});if(r)setNotice("Demo voucher issued. See your wallet below.")}}>{wasClaimed?"Already claimed":soldOut?"Sold out":needed>0?"Earn "+needed+" more points":"Claim demo reward →"}</button>
+      </div>;
+    })}</div>
+    {!data.offers.length&&<div className="card"><p className="muted">No active DEMO fixtures in this database yet. Fictional partner A/B/C offers are inserted only by a separately authorized manual seed, not during deploy or startup.</p></div>}
+    <div className="section"><h2>My demo vouchers</h2></div>
+    {!data.vouchers.length&&<div className="card"><p className="muted">No vouchers yet. Finish an accepted activity for confirmed demo points, then claim an eligible offer.</p></div>}
+    <div className="grid two">{data.vouchers.filter(v=>v.is_demo).map(v=><div className="card" key={v.id}><div className="row wrap"><h3>{v.title}</h3><span className="pill demo">DEMO · {v.state}</span></div><p className="small muted">{v.merchant} · simulated benefit only</p><div className="space"/>
+      {v.state==="issued"?<><div className="qr"><QRCodeSVG size={140} value={typeof window!=="undefined"?window.location.origin+"/"+voucherFragment(v.code):v.code}/></div><div className="space"/><p className="code">{v.code}</p><p className="tiny muted">QR and typed code refer to one atomic, single-use demo voucher. Only the assigned merchant or operator can redeem it.</p></>:<p className="muted small">Voucher already used or revoked.</p>}
      </div>)}</div>
    </>}
    {tab==="teams"&&<><div className="section"><div><span className="eyebrow">COMMUNITY</span><h2>Find your people</h2></div></div>
