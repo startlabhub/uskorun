@@ -103,3 +103,16 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id,started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_contributions_challenge ON challenge_contributions(challenge_id);
+
+CREATE TABLE IF NOT EXISTS team_contributions (
+  team_id UUID NOT NULL REFERENCES teams(id),
+  activity_id UUID NOT NULL REFERENCES activities(id),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  miles NUMERIC NOT NULL,
+  PRIMARY KEY (activity_id)
+);
+CREATE TABLE IF NOT EXISTS merchant_access (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  offer_id UUID NOT NULL REFERENCES offers(id),
+  PRIMARY KEY (user_id,offer_id)
+);
