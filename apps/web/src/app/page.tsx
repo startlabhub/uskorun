@@ -256,7 +256,7 @@ export default function Home(){
        !tracking&&pendingRecovery?.phase==='starting'?<><button disabled={busy} className="btn" onClick={start}>Retry Start</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
        !tracking&&pendingRecovery?.phase==='paused'?<><button disabled={busy} className="btn secondary" onClick={resume}>▶ Resume</button><button disabled={busy} className="btn" onClick={stop}>Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
        !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
-       <><button disabled={busy} className="btn secondary" onClick={pause}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
+       <><button disabled={busy} className="btn secondary" onClick={()=>pause()}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
      </div>
      <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Calls, app switching, and screen locks interrupt browser GPS. Return and tap Resume; unrecorded distance cannot be recovered. Raw GPS samples remain in this browser tab sessionStorage for failed Finish recovery until success or Abandon. Server checks plausibility; GPS cannot prove physical activity.</div>
     </div>
