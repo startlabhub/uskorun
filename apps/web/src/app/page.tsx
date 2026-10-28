@@ -53,7 +53,14 @@ export default function Home(){
   const old=readPendingRun(sessionStorage);
   if(old){const paused=old.phase==='recording'?withPause(old):old;
    saveDraft(paused);activity.current=paused.activityId;points.current=paused.points;
-   setPaused(true);setTracking(false);setGpsNote('Previous run recovered. Resume, retry finish, or abandon.');}
+   setKind(paused.kind);setFixCount(paused.points.length);
+   if(paused.points.length>0){
+    setLiveMiles(assessGPS(paused.points,paused.kind,paused.points[0].t-1000,Date.now()+1000).miles);
+   }
+   setPaused(true);setTracking(false);setGpsNote('Previous run recovered. Resume, retry finish, or abandon.');
+   // A saved session must be visible immediately after reload; QR handoff takes priority.
+   if(!code)setTab('track');
+  }
   const onHidden=()=>{if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording')pause()};
   document.addEventListener('visibilitychange',onHidden);
   window.addEventListener('pagehide',onHidden);
@@ -201,6 +208,7 @@ export default function Home(){
     <div className="card" style={{marginTop:15}}><h3>Create a movement</h3><p className="muted small">Team-created challenges are on the closed-beta roadmap. Create a team now and invite people to join you.</p><div className="space"/><button className="btn secondary small" onClick={()=>setTab("teams")}>Teams →</button></div>
    </>}
    {tab==="track"&&<><div className="section"><div><span className="eyebrow">TRACKING</span><h2>Your movement matters</h2></div></div>
+    {pendingRecovery&&!tracking&&<div className="alert" role="status" style={{marginBottom:14}}><strong>Saved activity recovered</strong><br/>{pendingRecovery.phase==='pending_finish'?'Finish was not confirmed. Your GPS samples are saved — retry Finish or abandon.':pendingRecovery.phase==='starting'?'Start was not confirmed. Retry Start with the same session ID or abandon.':'Your previous activity is paused. Resume, finish or abandon below.'}</div>}
     <div className="card accent">
      <div className="tabs" style={{justifyContent:"center"}}><button disabled={tracking} className={kind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={tracking} className={kind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
      <div className="track-circle"><div className="stat">{liveMiles.toFixed(2)}</div><div className="muted small">MILES · provisional</div></div>
