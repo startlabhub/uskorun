@@ -139,3 +139,16 @@ test('only explicit editing focus is blurred; navigation and body remain untouch
  assert.equal(blurEditingFocus(null),false);
  assert.equal(blurred,2);
 });
+
+test('after timer suspension focus notices expired GPS fixes without auto starting a watch',()=>{
+ const h=harness();h.watch.start();h.geo.emit(1,h.clock.now());
+ // Simulate iOS throttling where no interval callbacks execute during a call.
+ h.clock.time+=NO_FIX_WARNING_MS+1;
+ h.watch.focus();
+ assert.equal(h.watch.isRunning,false);
+ assert.equal(h.geo.count,1);
+ assert.equal(h.draft.phase,'paused');
+ assert.match(h.reason,/No new GPS fixes/);
+ // A second visible/focus notification cannot allocate another watch.
+ h.watch.focus();h.watch.visibilityChanged();assert.equal(h.geo.count,1);
+});
