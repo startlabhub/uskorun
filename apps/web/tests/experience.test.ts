@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {DEMO_EARN_RULE,activityPoints,assessGPS} from '../src/domain/gps.ts';
 import {MIN_ACCEPTED_MILES,DEMO_DAILY_POINT_CAP,preliminaryActivityPoints,
  preliminaryPointsNote,remainingConfirmedPoints,canClaimDemoOffer,nextDemoReward,selectedJoinedGoal} from '../src/domain/experience.ts';
@@ -40,13 +41,38 @@ test('claimed and exhausted demo offers are never claimable by UI',()=>{
  assert.equal(canClaimDemoOffer(100,offer,true),false);
  assert.equal(canClaimDemoOffer(100,{...offer,claimed:15},false),false);
 });
-test('shop calculates next price from confirmed balance and ignores claimed inventory',()=>{
- const offers=[{id:'a',cost_points:5,claimed:1,max_claims:5},
-   {id:'b',cost_points:10,claimed:0,max_claims:3},{id:'c',cost_points:20,claimed:0,max_claims:3}];
- assert.deepEqual(nextDemoReward(7,offers,[]),{offer:offers[1],remaining:3});
- assert.deepEqual(nextDemoReward(7,offers,[{offer_id:'b',state:'issued'}]),
+test('Home prefers affordable unclaimed demo reward at balances 0, 5, 10',()=>{
+ const offers=[{id:'a',cost_points:5,claimed:1,max_claims:25},
+   {id:'coffee',cost_points:10,claimed:0,max_claims:100},
+   {id:'c',cost_points:20,claimed:0,max_claims:20}];
+ assert.deepEqual(nextDemoReward(0,offers,[]),{offer:offers[0],remaining:5});
+ assert.deepEqual(nextDemoReward(5,offers,[]),{offer:offers[0],remaining:0});
+ assert.deepEqual(nextDemoReward(10,offers,[]),{offer:offers[0],remaining:0});
+ assert.deepEqual(nextDemoReward(10,offers,[{offer_id:'a',state:'issued'}]),
+  {offer:offers[1],remaining:0});
+ // Regression: 5 confirmed points must never be sent to 10-point coffee
+ // while a currently claimable 5-point Partner A remains available.
+ assert.notEqual(nextDemoReward(5,offers,[])?.offer.id,'coffee');
+});
+test('Home falls back to nearest unavailable, skipping claimed and sold-out',()=>{
+ const offers=[{id:'a',cost_points:5,claimed:0,max_claims:5},
+   {id:'b',cost_points:10,claimed:0,max_claims:3},
+   {id:'c',cost_points:20,claimed:0,max_claims:3}];
+ assert.deepEqual(nextDemoReward(7,offers,[]),{offer:offers[0],remaining:0});
+ assert.deepEqual(nextDemoReward(7,offers,[{offer_id:'a',state:'issued'}]),
+  {offer:offers[1],remaining:3});
+ assert.deepEqual(nextDemoReward(7,[{...offers[0],claimed:5},offers[1],offers[2]],[]),
+  {offer:offers[1],remaining:3});
+ assert.deepEqual(nextDemoReward(7,offers,[{offer_id:'a',state:'redeemed'},{offer_id:'b',state:'issued'}]),
   {offer:offers[2],remaining:13});
  assert.equal(nextDemoReward(7,offers,[{offer_id:'a',state:'issued'},{offer_id:'b',state:'redeemed'},{offer_id:'c',state:'issued'}]),null);
+ assert.equal(nextDemoReward(5,[],[]),null);
+ assert.equal(nextDemoReward(20,offers.map(o=>({...o,claimed:o.max_claims})),[]),null);
+});
+test('API offer query contract filters expired, inactive and non-demo inventory',()=>{
+ // Source contract only: actual PostgreSQL behavior must be checked separately.
+ const source=readFileSync(new URL('../src/app/api/data/route.ts',import.meta.url),'utf8');
+ assert.match(source,/WHERE o\.state='active' AND o\.is_demo=TRUE AND o\.ends_at>NOW\(\)/);
 });
 test('joined goal selection uses existing enrolled challenge, no new goal engine',()=>{
  const a={id:'a',title:'Together',target_miles:100,progress_miles:5};
