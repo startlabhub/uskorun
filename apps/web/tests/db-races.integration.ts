@@ -72,6 +72,30 @@ test('REAL PostgreSQL concurrent starts, finish retry, points, claims and redemp
   await pool.query("UPDATE offers SET ends_at=NOW()-INTERVAL '1 second' WHERE id=$1",[offer2]);
   const v2=(await pool.query('SELECT encrypted_code FROM vouchers WHERE id=$1',[second.voucherId])).rows[0];
   await assert.rejects(redeemVoucher({id:merchant,role:'merchant'},decryptCode(v2.encrypted_code)),/no longer valid/);
+  // Exercise the exact SQL used by GET /api/data against a disposable PostgreSQL DB.
+  // This is separate from the source-contract unit test and never touches staging.
+  const apiSource=readFileSync(join(process.cwd(),'src/app/api/data/route.ts'),'utf8');
+  const marker='db.query(`SELECT o.id,o.title';
+  const from=apiSource.indexOf(marker),until=apiSource.indexOf('`)',from);
+  assert.ok(from>=0&&until>from,'Extract API offer query for real DB filter check');
+  const offerSelect=apiSource.slice(from+'db.query(`'.length,until);
+  const fixture=async(state:string,isDemo:boolean,endsAt:Date)=>{
+   const q=await pool.query(`INSERT INTO offers
+      (title,merchant,details,city,cost_points,max_claims,is_demo,state,ends_at)
+      VALUES($1,'Disposable API test','not real','Sacramento',1,1,$2,$3,$4) RETURNING id`,
+      ['API visibility '+randomUUID(),isDemo,state,endsAt]);
+   return q.rows[0].id as string;
+  };
+  const later=new Date(Date.now()+3600000),earlier=new Date(Date.now()-3600000);
+  const listedActive=await fixture('active',true,later);
+  const excludedInactive=await fixture('draft',true,later);
+  const excludedExpired=await fixture('active',true,earlier);
+  const excludedNonDemo=await fixture('active',false,later);
+  const visibleIds=new Set((await pool.query(offerSelect)).rows.map(row=>row.id as string));
+  assert.equal(visibleIds.has(listedActive),true,'Active demo offer must be visible');
+  assert.equal(visibleIds.has(excludedInactive),false,'Draft offer must not be visible');
+  assert.equal(visibleIds.has(excludedExpired),false,'Expired offer must not be visible');
+  assert.equal(visibleIds.has(excludedNonDemo),false,'Non-demo offer must not be visible');
   // A new activity may not reuse any old activity timestamps to mint another award.
   const secondSession=await startRecording(runner,randomUUID(),'run');
   const rejected=await finishRecording(runner,secondSession.activityId,points);
