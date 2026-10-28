@@ -39,12 +39,16 @@ export function assessGPS(points:GPSPoint[],kind:'run'|'walk',serverStart:number
   acceptedPoints++;
   if(!anchor){anchor=p;last=p;continue;}
   const dt=(p.t-anchor.t)/1000;
-  if(dt<=0||dt>MAX_FIX_GAP_SECONDS){discardedPoints++;anchor=p;last=p;continue;}
+  // MAX_FIX_GAP_SECONDS applies to consecutive samples above, not anchor age.
+  // A high-accuracy-uncertainty fix may need >15 seconds of continuous movement
+  // to exceed the existing displacement noise floor. Never bridge a missing fix.
+  if(dt<=0){discardedPoints++;anchor=p;last=p;continue;}
   // Preserve the prior accepted 1 Hz cumulative short-step logic.
   const d=meters(anchor,p);
   const noiseFloor=Math.max(7,0.7*(anchor.accuracy+p.accuracy));
+  // The existing minimum average speed plus displacement floor suppresses
+  // stationary jitter; resetting anchor on a fixed time would erase valid walks.
   if(d>=noiseFloor&&d/dt>=0.6&&d/dt<=maxSpeed){distance+=d;anchor=p;}
-  else if(dt>=30)anchor=p;
   last=p;
  }
  const miles=Math.round(distance/1609.344*1000)/1000;
