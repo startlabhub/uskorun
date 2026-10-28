@@ -66,3 +66,29 @@ test('silent 30-second 60-meter gap in same segment fails closed',()=>{
  const t=Date.now()-35000,p={lat:38.58,lon:-121.49,accuracy:4,t,segment:0};
  assert.equal(check([p,{...p,t:t+30000,lon:-121.49+60/86900}]).miles,0);
 });
+
+ // The high uncertainty displacement floor needs more than 15s of continuous
+ // 1 Hz movement. These are synthetic fixes, not a physical GPS device test.
+ for(const accuracy of [20,30,50]){
+  test(`continuous 1 Hz walk (1.4 m/s), accuracy ${accuracy}m keeps distance`,()=>{
+   const fixes=path(1.4,1,120).map(p=>({...p,accuracy}));
+   const result=check(fixes,'walk');
+   assert.equal(result.reason,'accepted');
+   assert.ok(result.miles>0.07&&result.miles<0.14,`accuracy ${accuracy}: ${result.miles} mi`);
+  });
+  test(`continuous 1 Hz run (3 m/s), accuracy ${accuracy}m keeps distance`,()=>{
+   const fixes=path(3,1,120).map(p=>({...p,accuracy}));
+   const result=check(fixes,'run');
+   assert.equal(result.reason,'accepted');
+   assert.ok(result.miles>0.17&&result.miles<0.26,`accuracy ${accuracy}: ${result.miles} mi`);
+  });
+  test(`stationary alternating jitter, accuracy ${accuracy}m earns zero`,()=>{
+   const start=Date.now()-125000;
+   const fixes:GPSPoint[]=Array.from({length:121},(_,i)=>({
+    lat:38.58,lon:-121.49+(i%2?12:0)/86900,
+    accuracy,t:start+i*1000,segment:0
+   }));
+   assert.equal(check(fixes,'walk').miles,0);
+   assert.equal(check(fixes,'run').miles,0);
+  });
+ }
