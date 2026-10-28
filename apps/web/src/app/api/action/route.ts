@@ -108,6 +108,8 @@ export async function POST(req:NextRequest){
    const result=await transaction(async c=>{
     const o=await c.query("SELECT * FROM offers WHERE id=$1 AND state='active' AND ends_at>NOW() FOR UPDATE",[b.offerId]);
     const offer=o.rows[0];if(!offer)error("Offer not available",404);
+    // Commercial benefits must remain off until a founder-approved pilot + contractual inventory.
+    if(!offer.is_demo && process.env.ALLOW_REAL_REWARDS!=="explicit-founder-approved")error("Real sponsor rewards are disabled",403);
     const prior=await c.query("SELECT id FROM vouchers WHERE offer_id=$1 AND user_id=$2",[b.offerId,user.id]);
     if(prior.rowCount)error("Offer already claimed",409);
     const used=await c.query("SELECT COUNT(*)::int AS count FROM vouchers WHERE offer_id=$1",[b.offerId]);
@@ -128,7 +130,7 @@ export async function POST(req:NextRequest){
    const code=String(b.code||"").trim().toUpperCase();
    if(code.length<12||code.length>64)error("Invalid voucher code");
    const result=await transaction(async c=>{
-    const v=await c.query(`SELECT v.id,v.state,v.offer_id,o.title,o.is_demo FROM vouchers v
+    const v=await c.query(`SELECT v.id,v.state,v.offer_id,o.title,o.is_demo,o.ends_at,o.state AS offer_state FROM vouchers v
        JOIN offers o ON o.id=v.offer_id WHERE v.code_hash=$1 FOR UPDATE OF v`,[tokenHash(code)]);
     const item=v.rows[0];
     if(!item)error("Voucher not found",404);
@@ -137,6 +139,7 @@ export async function POST(req:NextRequest){
       if(!access.rowCount)error("Merchant not authorized for this offer",403);
     }
     if(item.state!=="issued")error("Voucher already redeemed or revoked",409);
+    if(new Date(item.ends_at).getTime()<=Date.now()||item.offer_state!=="active")error("Offer no longer valid",409);
     await c.query("UPDATE vouchers SET state='redeemed',redeemed_at=NOW() WHERE id=$1",[item.id]);
     await c.query("INSERT INTO audit_events(actor_id,action,object_id) VALUES($1,'redeem',$2)",[user.id,item.id]);
     return {title:item.title,is_demo:item.is_demo};
