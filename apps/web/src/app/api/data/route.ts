@@ -14,7 +14,7 @@ export async function GET(req:NextRequest){
        COUNT(v.id)::int AS claimed FROM offers o LEFT JOIN vouchers v ON v.offer_id=o.id
        WHERE o.state='active' AND o.ends_at>NOW() GROUP BY o.id ORDER BY o.cost_points`),
    db.query(`SELECT t.id,t.name,t.city,t.invite_code,COUNT(tm.user_id)::int AS members,
-    COALESCE(SUM(tc.miles),0)::float AS miles
+    COALESCE(MAX(tc.miles),0)::float AS miles
     FROM teams t LEFT JOIN team_members tm ON tm.team_id=t.id
     LEFT JOIN (SELECT team_id,SUM(miles) AS miles FROM team_contributions GROUP BY team_id) tc ON tc.team_id=t.id
     GROUP BY t.id,tc.miles ORDER BY t.created_at DESC LIMIT 40`)
