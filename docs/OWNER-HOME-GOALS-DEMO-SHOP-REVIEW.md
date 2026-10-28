@@ -26,10 +26,10 @@ To seed **only after an owner-authorized future disposable local or staging test
 ```sh
 cd apps/web
 # Only with explicitly approved, isolated demo DATABASE_URL:
-SEED_DEMO_SHOP_CONFIRM=I_ACKNOWLEDGE_DEMO_ONLY npx tsx scripts/seed-demo-shop.ts
+USKORUN_ENV=local-test SEED_DEMO_SHOP_CONFIRM=I_ACKNOWLEDGE_DEMO_ONLY npx tsx scripts/seed-demo-shop.ts
 ```
 
-The script refuses production, acquires a dedicated advisory lock, checks exact title/price/merchant/cap on existing fixtures, and inserts missing rows without silently updating old ones. **Do not run this command against the live USKORUN staging DB without a new approval.** There is no seed action in `migrate.ts`, `railway.json` or CI.
+The script refuses production or unset USKORUN_ENV (only explicit local-test or staging are accepted), acquires a dedicated advisory lock, checks exact title/price/merchant/cap on existing fixtures, and inserts missing rows without silently updating old ones. **Do not run this command against the live USKORUN staging DB without a new approval.** There is no seed action in `migrate.ts`, `railway.json` or CI.
 
 ## Local verification checklist (no cloud)
 - [ ] `npm test` — actual count and result to be filled by independent QA.
