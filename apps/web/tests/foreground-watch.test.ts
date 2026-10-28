@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ForegroundWatch,NO_FIX_WARNING_MS} from '../src/domain/foreground-watch.ts';
+import {ForegroundWatch,NO_FIX_WARNING_MS,blurEditingFocus} from '../src/domain/foreground-watch.ts';
 import type {GeoPort,WatchClock,PositionSample} from '../src/domain/foreground-watch.ts';
 import {newPendingRun,withStartedId,withFix,withPause,withResume,withPendingFinish,finalizeAfterResponse} from '../src/domain/pending.ts';
 import type {PendingRun} from '../src/domain/pending.ts';
@@ -126,4 +126,16 @@ test('hidden before new watch start cannot record while invisible',()=>{
  assert.equal(h.geo.count,0);
  assert.equal(h.draft.phase,'paused');
  assert.equal(h.resume(),false);assert.equal(h.geo.count,0);
+});
+
+test('only explicit editing focus is blurred; navigation and body remain untouched',()=>{
+ let blurred=0;
+ const input={tagName:'INPUT',blur:()=>{blurred++}} as unknown as Element;
+ const textarea={tagName:'TEXTAREA',blur:()=>{blurred++}} as unknown as Element;
+ const button={tagName:'BUTTON',blur:()=>{throw new Error('must not blur button')}} as unknown as Element;
+ assert.equal(blurEditingFocus(input),true);
+ assert.equal(blurEditingFocus(textarea),true);
+ assert.equal(blurEditingFocus(button),false);
+ assert.equal(blurEditingFocus(null),false);
+ assert.equal(blurred,2);
 });
