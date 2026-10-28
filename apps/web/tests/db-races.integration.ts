@@ -16,6 +16,8 @@ test('REAL PostgreSQL concurrent starts, finish retry, points, claims and redemp
  const {startRecording,finishRecording,abandonRecording}=await import('../src/server/activity-service');
  const {claimOffer,redeemVoucher}=await import('../src/server/reward-service');
  const {decryptCode}=await import('../src/server/security');
+ const {enforceAuthLimits}=await import('../src/server/auth-rate');
+ const {closeTestDatabasePool}=await import('../src/server/db');
  try{
   await pool.query(readFileSync(join(process.cwd(),'scripts/schema.sql'),'utf8'));
   await pool.query(readFileSync(join(process.cwd(),'scripts/sprint-2-migration.sql'),'utf8'));
@@ -76,7 +78,9 @@ test('REAL PostgreSQL concurrent starts, finish retry, points, claims and redemp
   await abandonRecording(runner,activeAfter.activityId);
   assert.equal((await pool.query("SELECT COUNT(*)::int AS count FROM activities WHERE status='recording' AND user_id=$1",[runner])).rows[0].count,0);
  }finally{
-  // Dedicated disposable database only. Never run test suite against staging/production.
-  await pool.end();
+  // Both the test-owned pool and the singleton used by service modules must close.
+  // The service teardown refuses any non-test DB connection.
+  try{await closeTestDatabasePool();}
+  finally{await pool.end();}
  }
 });
