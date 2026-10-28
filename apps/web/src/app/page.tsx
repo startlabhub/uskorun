@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {QRCodeSVG} from "qrcode.react";
-import {meters,GPSPoint} from "@/domain/gps";
+import {assessGPS,GPSPoint} from "@/domain/gps";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
 type Challenge={id:string;title:string;city:string;details:string;target_miles:number;ends_at:string;progress_miles:number;active_people:number};
 type Offer={id:string;title:string;merchant:string;city:string;details:string;cost_points:number;is_demo:boolean;claimed:number;max_claims:number};
@@ -47,12 +47,9 @@ export default function Home(){
   watch.current=navigator.geolocation.watchPosition(({coords,timestamp})=>{
    const p={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
    if(p.accuracy>50){setGpsNote("Weak GPS signal; this segment may not count");return}
-   const prev=points.current[points.current.length-1];
    points.current.push(p);setFixCount(points.current.length);
-   if(prev){const dt=(p.t-prev.t)/1000,dist=meters(prev,p);
-     if(dt>0&&dt<=60&&dist/dt<=(kind==="run"?8:3.5)&&dist>Math.max(6,(p.accuracy+prev.accuracy)/3))
-       setLiveMiles(n=>n+dist/1609.344);
-   }
+   const track=assessGPS(points.current,kind,points.current[0].t-1000,Date.now()+1000);
+   setLiveMiles(track.miles);
    setGpsNote("GPS connected · accuracy ±"+Math.round(p.accuracy)+"m");
   },(err)=>setGpsNote("GPS interrupted: "+err.message),{enableHighAccuracy:true,maximumAge:0,timeout:15000});
   // Optional screen wake lock: never a substitute for native background GPS.
