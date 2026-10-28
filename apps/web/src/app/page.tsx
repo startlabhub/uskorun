@@ -6,11 +6,13 @@ import {newPendingRun,withStartedId,withPause,withResume,withFix,withPendingFini
 import type {PendingRun} from "@/domain/pending";
 import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-handoff";
 import {ForegroundWatch,browserWatchClock,blurEditingFocus} from "@/domain/foreground-watch";
+import {preliminaryActivityPoints,preliminaryPointsNote,remainingConfirmedPoints,canClaimDemoOffer,nextDemoReward,selectedJoinedGoal} from "@/domain/experience";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
 type Challenge={id:string;title:string;city:string;details:string;target_miles:number;ends_at:string;progress_miles:number;active_people:number};
 type Offer={id:string;title:string;merchant:string;city:string;details:string;cost_points:number;is_demo:boolean;claimed:number;max_claims:number};
 type Team={id:string;name:string;city:string;invite_code:string;members:number;miles:number};
-type Voucher={id:string;state:string;title:string;merchant:string;is_demo:boolean;code:string;issued_at:string};
+type Voucher={id:string;offer_id:string;state:string;title:string;merchant:string;is_demo:boolean;code:string;issued_at:string};
+type PartnerStats={id:string;title:string;details:string;cost_points:number;max_claims:number;issued_total:number;outstanding:number;redeemed:number};
 type Activity={id:string;client_id:string;kind:string;distance_miles:number;status:string;reason:string;started_at:string};
 type Data={user:User|null;challenges:Challenge[];offers:Offer[];teams:Team[];vouchers:Voucher[];activities:Activity[];points:number;myChallenges:string[];myTeam:string|null};
 const empty:Data={user:null,challenges:[],offers:[],teams:[],vouchers:[],activities:[],points:0,myChallenges:[],myTeam:null};
@@ -23,6 +25,7 @@ export default function Home(){
  const [kind,setKind]=useState<"run"|"walk">("run"),[tracking,setTracking]=useState(false),[paused,setPaused]=useState(false);
  const [liveMiles,setLiveMiles]=useState(0),[gpsNote,setGpsNote]=useState("Ready to record"),[fixCount,setFixCount]=useState(0);
  const [teamName,setTeamName]=useState(""),[teamCode,setTeamCode]=useState(""),[redeemCode,setRedeemCode]=useState("");
+ const [partnerStats,setPartnerStats]=useState<PartnerStats[]|null>(null),[partnerRefresh,setPartnerRefresh]=useState(0);
  const points=useRef<GPSPoint[]>([]),activity=useRef<string|null>(null),wake=useRef<any>(null);
  const watcher=useRef<ForegroundWatch|null>(null),wakeEpoch=useRef(0);
  const [busy,setBusy]=useState(false),busyRef=useRef(false);
@@ -82,6 +85,14 @@ export default function Home(){
    clearWatch();
   };
  },[]);
+ useEffect(()=>{
+  if(tab!=="merchant"||!["merchant","admin"].includes(data.user?.role||"")){setPartnerStats(null);return}
+  let cancelled=false;
+  fetch("/api/partner-summary",{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error("Partner summary unavailable");return r.json()})
+   .then(v=>{if(!cancelled)setPartnerStats(v.offers)})
+   .catch(()=>{if(!cancelled)setPartnerStats(null)});
+  return()=>{cancelled=true};
+ },[tab,data.user?.role,partnerRefresh]);
  async function act(action:string,payload:any={}){
   setProblem("");setNotice("");
   try{const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
@@ -203,6 +214,11 @@ export default function Home(){
  }
  const invite=(team?:Team)=>typeof window!=="undefined"?window.location.origin+(team?"/?team="+team.invite_code:"/?invite=1"):"";
  const me=data.user,role=me?.role||"runner";
+ const sessionKind=pendingRecovery?.kind??kind;
+ const estimatedPoints=preliminaryActivityPoints(sessionKind,liveMiles);
+ const joinedGoal=selectedJoinedGoal(data.challenges,data.myChallenges);
+ const nextReward=nextDemoReward(data.points,data.offers,data.vouchers);
+ const hasOpenActivity=!!pendingRecovery&&pendingRecovery.phase!=="starting";
  if(loading)return <main className="shell"><div className="logo">USKO<b>RUN</b></div><p className="muted">Loading your movement…</p></main>;
  return <main className="shell">
   <header className="top"><div className="row"><span className="logo-small">↗</span><span className="logo">USKO<b>RUN</b></span></div><span className="tag">SACRAMENTO BETA</span></header>
