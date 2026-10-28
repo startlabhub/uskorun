@@ -23,8 +23,8 @@ const fixtures=[
 if(process.env.SEED_DEMO_SHOP_CONFIRM!=='I_ACKNOWLEDGE_DEMO_ONLY')
  throw new Error('Explicit SEED_DEMO_SHOP_CONFIRM required; no inserts performed');
 if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL required');
-if(process.env.NODE_ENV==='production'||process.env.USKORUN_ENV==='production')
- throw new Error('This seed refuses production');
+if(!['local-test','staging'].includes(process.env.USKORUN_ENV||''))
+ throw new Error('USKORUN_ENV must explicitly be local-test or staging; production and unset environments are refused');
 const pool=new Pool({connectionString:process.env.DATABASE_URL});
 const client=await pool.connect();
 try{
