@@ -34,7 +34,9 @@ export function nextDemoReward(confirmed:number,offers:ShopOffer[],vouchers:Wall
  const candidates=offers.filter(o=>!prior.has(o.id)&&o.max_claims>o.claimed)
   .sort((a,b)=>a.cost_points-b.cost_points);
  if(!candidates.length)return null;
- const offer=candidates.find(o=>remainingConfirmedPoints(confirmed,o.cost_points)>0)??candidates[0];
+ // First recommend a claimable (unclaimed, in-stock) offer. If none is
+ // affordable, show the cheapest available offer and how many points remain.
+ const offer=candidates.find(o=>remainingConfirmedPoints(confirmed,o.cost_points)===0)??candidates[0];
  return {offer,remaining:remainingConfirmedPoints(confirmed,offer.cost_points)};
 }
 export function selectedJoinedGoal(challenges:GoalSummary[],joinedIds:string[]):GoalSummary|null{
