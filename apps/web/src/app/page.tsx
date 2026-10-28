@@ -5,6 +5,7 @@ import {assessGPS,GPSPoint} from "@/domain/gps";
 import {newPendingRun,withStartedId,withPause,withResume,withFix,withPendingFinish,readPendingRun,writePendingRun,clearPendingRun} from "@/domain/pending";
 import type {PendingRun} from "@/domain/pending";
 import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-handoff";
+import {ForegroundWatch,browserWatchClock,blurEditingFocus} from "@/domain/foreground-watch";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
 type Challenge={id:string;title:string;city:string;details:string;target_miles:number;ends_at:string;progress_miles:number;active_people:number};
 type Offer={id:string;title:string;merchant:string;city:string;details:string;cost_points:number;is_demo:boolean;claimed:number;max_claims:number};
@@ -22,7 +23,8 @@ export default function Home(){
  const [kind,setKind]=useState<"run"|"walk">("run"),[tracking,setTracking]=useState(false),[paused,setPaused]=useState(false);
  const [liveMiles,setLiveMiles]=useState(0),[gpsNote,setGpsNote]=useState("Ready to record"),[fixCount,setFixCount]=useState(0);
  const [teamName,setTeamName]=useState(""),[teamCode,setTeamCode]=useState(""),[redeemCode,setRedeemCode]=useState("");
- const points=useRef<GPSPoint[]>([]),watch=useRef<number|null>(null),activity=useRef<string|null>(null),wake=useRef<any>(null);
+ const points=useRef<GPSPoint[]>([]),activity=useRef<string|null>(null),wake=useRef<any>(null);
+ const watcher=useRef<ForegroundWatch|null>(null),wakeEpoch=useRef(0);
  const [busy,setBusy]=useState(false),busyRef=useRef(false);
  const [pendingRecovery,setPendingRecovery]=useState<PendingRun|null>(null);
  const draftRef=useRef<PendingRun|null>(null),watchEpoch=useRef(0);
@@ -61,11 +63,24 @@ export default function Home(){
    // A saved session must be visible immediately after reload; QR handoff takes priority.
    if(!code)setTab('track');
   }
-  const onHidden=()=>{if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording')pause()};
-  document.addEventListener('visibilitychange',onHidden);
-  window.addEventListener('pagehide',onHidden);
-  return()=>{document.removeEventListener('visibilitychange',onHidden);window.removeEventListener('pagehide',onHidden);
-   if(watch.current!==null)navigator.geolocation?.clearWatch(watch.current);wake.current?.release?.()};
+  const onVisibility=()=>{
+   if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording'&&!watcher.current?.isRunning)
+    pause('App hidden: recording interrupted. Return and tap Resume.');
+   watcher.current?.visibilityChanged();
+  };
+  const onPageHide=()=>{
+   if(draftRef.current?.phase==='recording')pause('App interrupted: return and tap Resume.');
+  };
+  const onFocus=()=>watcher.current?.focus(); // Never auto-resume on returning from a call.
+  document.addEventListener('visibilitychange',onVisibility);
+  window.addEventListener('pagehide',onPageHide);
+  window.addEventListener('focus',onFocus);
+  return()=>{
+   document.removeEventListener('visibilitychange',onVisibility);
+   window.removeEventListener('pagehide',onPageHide);
+   window.removeEventListener('focus',onFocus);
+   clearWatch();
+  };
  },[]);
  async function act(action:string,payload:any={}){
   setProblem("");setNotice("");
@@ -75,35 +90,57 @@ export default function Home(){
   }catch(e:any){setProblem(e.message||"Request failed");return null}
  }
  async function auth(e:React.FormEvent){e.preventDefault();
+  // iOS may retain an active text editing/undo context while the phone moves.
+  // Blur only the currently focused editor on explicit form submission.
+  blurEditingFocus(document.activeElement);
   const r=await act(authMode,{email,password,ageConfirmed:age,consent});
   if(r){setPassword("");setTab("home");setNotice("Welcome to USKORUN!")}
  }
  const geoloc=(navigatorAvailable:boolean)=>navigatorAvailable&&"geolocation" in navigator;
  function clearWatch(){
-  watchEpoch.current++;
-  if(watch.current!==null&&geoloc(typeof navigator!=="undefined"))navigator.geolocation.clearWatch(watch.current);
-  watch.current=null;wake.current?.release?.();wake.current=null;
+  watcher.current?.stop();
+  wakeEpoch.current++;
+  void wake.current?.release?.().catch?.(()=>{});
+  wake.current=null;
  }
  function observe(){
-  if(!geoloc(typeof navigator!=="undefined")){setProblem('This browser has no GPS');return}
-  const epoch=++watchEpoch.current;
-  watch.current=navigator.geolocation.watchPosition(({coords,timestamp})=>{
-   if(epoch!==watchEpoch.current||draftRef.current?.phase!=='recording')return;
-   if(document.visibilityState==='hidden'){pause();return}
-   const raw={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
-   if(raw.accuracy>50){setGpsNote('Weak GPS: segment not counted');return}
-   try{
-    const updated=withFix(draftRef.current,raw);
-    saveDraft(updated);points.current=updated.points;setFixCount(points.current.length);
-    const track=assessGPS(points.current,updated.kind,points.current[0].t-1000,Date.now()+1000);
-    setLiveMiles(track.miles);setGpsNote('GPS accuracy ±'+Math.round(raw.accuracy)+'m');
-   }catch(e:any){setGpsNote(e.message);pause()}
-  },(err)=>{setGpsNote('GPS interrupted: '+err.message);pause()},
-  {enableHighAccuracy:true,maximumAge:0,timeout:15000});
-  try{(navigator as any).wakeLock?.request('screen').then((lock:any)=>wake.current=lock).catch(()=>{})}catch{}
+  if(!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');pause('GPS unavailable. Tap Resume after location access is restored.');return}
+  if(!watcher.current){
+   watcher.current=new ForegroundWatch({
+    geo:navigator.geolocation,
+    clock:browserWatchClock,
+    visible:()=>document.visibilityState==='visible',
+    onFix:({coords,timestamp})=>{
+     const d=draftRef.current;
+     if(d?.phase!=='recording')return;
+     const raw={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
+     if(raw.accuracy>50){setGpsNote('Weak GPS accuracy: no distance credited for this fix');return}
+     try{
+      const updated=withFix(d,raw);
+      saveDraft(updated);points.current=updated.points;setFixCount(points.current.length);
+      const track=assessGPS(points.current,updated.kind,points.current[0].t-1000,Date.now()+1000);
+      setLiveMiles(track.miles);
+      setGpsNote('GPS accuracy ±'+Math.round(raw.accuracy)+'m');
+     }catch(e:any){pause(String(e.message||'GPS sample failed. Tap Resume.'))}
+    },
+    onInterrupted:reason=>pause(reason)
+   });
+  }
+  if(!watcher.current.start())return;
+  const epoch=++wakeEpoch.current;
+  // Wake Lock is a foreground hint only; it cannot grant background GPS.
+  try{
+   (navigator as any).wakeLock?.request('screen').then((lock:any)=>{
+    if(epoch!==wakeEpoch.current||!watcher.current?.isRunning){
+     void lock.release().catch?.(()=>{});return;
+    }
+    wake.current=lock;
+   }).catch(()=>{});
+  }catch{}
  }
  async function start(){
-  if(busyRef.current||tracking||draftRef.current?.phase==='pending_finish')return;
+  blurEditingFocus(document.activeElement);
+  if(busyRef.current||watcher.current?.isRunning||tracking||draftRef.current?.phase==='pending_finish')return;
   if(!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');return}
   busyRef.current=true;setBusy(true);
   try{
@@ -118,16 +155,17 @@ export default function Home(){
    setLiveMiles(0);setFixCount(points.current.length);setTracking(true);setPaused(false);observe();
   }finally{busyRef.current=false;setBusy(false)}
  }
- function pause(){
+ function pause(reason='Paused — no movement recorded until resumed'){
   clearWatch();const d=draftRef.current;
   if(d?.phase==='recording')saveDraft(withPause(d));
-  setTracking(false);setPaused(true);setGpsNote('Paused — no movement recorded until resumed');
+  setTracking(false);setPaused(true);setGpsNote(reason);
  }
  function resume(){
+  blurEditingFocus(document.activeElement);
   const d=draftRef.current;
-  if(!d||!d.activityId||d.phase!=='paused'||busyRef.current)return;
+  if(!d||!d.activityId||d.phase!=='paused'||busyRef.current||watcher.current?.isRunning)return;
   const next=withResume(d);saveDraft(next);setTracking(true);setPaused(false);
-  setGpsNote('Reconnecting GPS…');observe();
+  setGpsNote('Reconnecting GPS in a new segment; missed distance is not counted…');observe();
  }
  async function stop(){
   if(busyRef.current)return;
@@ -208,7 +246,7 @@ export default function Home(){
     <div className="card" style={{marginTop:15}}><h3>Create a movement</h3><p className="muted small">Team-created challenges are on the closed-beta roadmap. Create a team now and invite people to join you.</p><div className="space"/><button className="btn secondary small" onClick={()=>setTab("teams")}>Teams →</button></div>
    </>}
    {tab==="track"&&<><div className="section"><div><span className="eyebrow">TRACKING</span><h2>Your movement matters</h2></div></div>
-    {pendingRecovery&&!tracking&&<div className="alert" role="status" style={{marginBottom:14}}><strong>Saved activity recovered</strong><br/>{pendingRecovery.phase==='pending_finish'?'Finish was not confirmed. Your GPS samples are saved — retry Finish or abandon.':pendingRecovery.phase==='starting'?'Start was not confirmed. Retry Start with the same session ID or abandon.':'Your previous activity is paused. Resume, finish or abandon below.'}</div>}
+    {pendingRecovery&&!tracking&&<div className="alert" role="status" style={{marginBottom:14}}><strong>Activity paused — GPS not recording</strong><br/>{pendingRecovery.phase==='pending_finish'?'Finish was not confirmed. Your GPS samples are saved — retry Finish or abandon.':pendingRecovery.phase==='starting'?'Start was not confirmed. Retry Start with the same session ID or abandon.':'Your activity was interrupted or paused. Return to this screen and tap Resume to start a new GPS segment; missed distance is not counted.'}</div>}
     <div className="card accent">
      <div className="tabs" style={{justifyContent:"center"}}><button disabled={tracking} className={kind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={tracking} className={kind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
      <div className="track-circle"><div className="stat">{liveMiles.toFixed(2)}</div><div className="muted small">MILES · provisional</div></div>
@@ -220,7 +258,7 @@ export default function Home(){
        !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
        <><button disabled={busy} className="btn secondary" onClick={pause}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
      </div>
-     <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Locked-screen or background mileage may be lost and will never be recreated. Raw GPS samples remain in this browser tab sessionStorage for failed Finish recovery until success or Abandon. Server checks plausibility; GPS cannot prove physical activity.</div>
+     <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Calls, app switching, and screen locks interrupt browser GPS. Return and tap Resume; unrecorded distance cannot be recovered. Raw GPS samples remain in this browser tab sessionStorage for failed Finish recovery until success or Abandon. Server checks plausibility; GPS cannot prove physical activity.</div>
     </div>
     <div className="section"><h2>How points work</h2></div>
     <div className="grid two"><div className="card"><div className="stat">15</div><div className="stat-label">Beta points / accepted running mile</div></div><div className="card"><div className="stat">10</div><div className="stat-label">Beta points / accepted walking mile</div></div></div>
