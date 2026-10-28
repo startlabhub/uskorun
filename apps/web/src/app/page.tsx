@@ -285,8 +285,13 @@ export default function Home(){
    {tab==="track"&&<><div className="section"><div><span className="eyebrow">TRACKING</span><h2>Your movement matters</h2></div></div>
     {pendingRecovery&&!tracking&&<div className="alert" role="status" style={{marginBottom:14}}><strong>Activity paused — GPS not recording</strong><br/>{pendingRecovery.phase==='pending_finish'?'Finish was not confirmed. Your GPS samples are saved — retry Finish or abandon.':pendingRecovery.phase==='starting'?'Start was not confirmed. Retry Start with the same session ID or abandon.':'Your activity was interrupted or paused. Return to this screen and tap Resume to start a new GPS segment; missed distance is not counted.'}</div>}
     <div className="card accent">
-     <div className="tabs" style={{justifyContent:"center"}}><button disabled={tracking} className={kind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={tracking} className={kind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
+     <div className="tabs" style={{justifyContent:"center"}}><button disabled={!!pendingRecovery} className={sessionKind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={!!pendingRecovery} className={sessionKind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
      <div className="track-circle"><div className="stat">{liveMiles.toFixed(2)}</div><div className="muted small">MILES · provisional</div></div>
+     <div className="grid two">
+      <div className="card"><div className="stat">{estimatedPoints}</div><div className="stat-label">Estimated session points · unconfirmed</div></div>
+      <div className="card"><div className="stat">{data.points}</div><div className="stat-label">Confirmed shop balance</div></div>
+     </div>
+     <p className="tiny muted" style={{textAlign:"center",marginTop:12}}>{preliminaryPointsNote(sessionKind,liveMiles)}. Final award can be lower or zero after Finish, server validation and daily 150-point cap.</p>
      <p style={{textAlign:"center",marginBottom:15}} className="small muted">{gpsNote} · {fixCount} fixes</p>
      <div className="track-control">
       {pendingRecovery?.phase==='pending_finish'?<><button disabled={busy} className="btn" onClick={stop}>Retry Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
