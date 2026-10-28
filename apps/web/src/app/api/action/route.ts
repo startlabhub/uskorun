@@ -66,6 +66,7 @@ export async function POST(req:NextRequest){
       [status,track.durationSeconds,track.miles,track.reason,a.id]);
     if(status==="accepted"){
      // Beta award cap: per-activity 75 points and daily total 150.
+     await c.query("SELECT id FROM users WHERE id=$1 FOR UPDATE",[user.id]);
      const daily=await c.query(`SELECT COALESCE(SUM(delta),0)::int AS total FROM points_ledger
        WHERE user_id=$1 AND source_type='activity' AND created_at>=date_trunc('day',NOW() AT TIME ZONE 'America/Los_Angeles') AT TIME ZONE 'America/Los_Angeles'`,[user.id]);
      const award=Math.max(0,Math.min(activityPoints(a.kind,track.miles),150-Number(daily.rows[0].total)));
@@ -111,6 +112,7 @@ export async function POST(req:NextRequest){
     if(prior.rowCount)error("Offer already claimed",409);
     const used=await c.query("SELECT COUNT(*)::int AS count FROM vouchers WHERE offer_id=$1",[b.offerId]);
     if(Number(used.rows[0].count)>=Number(offer.max_claims))error("Offer sold out",409);
+    await c.query("SELECT id FROM users WHERE id=$1 FOR UPDATE",[user.id]);
     const points=await c.query("SELECT COALESCE(SUM(delta),0)::int AS balance FROM points_ledger WHERE user_id=$1",[user.id]);
     if(Number(points.rows[0].balance)<offer.cost_points)error("Not enough points",409);
     const code=randomBytes(12).toString("base64url").toUpperCase();
