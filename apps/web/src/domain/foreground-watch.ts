@@ -113,10 +113,11 @@ export class ForegroundWatch {
 }
 /** Only release editing focus on deliberate product transitions; never block gestures globally. */
 export function blurEditingFocus(active:Element|null):boolean{
-  if(active instanceof HTMLInputElement||
-     active instanceof HTMLTextAreaElement||
-     (active instanceof HTMLElement&&active.isContentEditable)){
-    active.blur();return true;
+  const editor=active as HTMLElement|null;
+  const tag=editor?.tagName?.toUpperCase();
+  if(editor&&typeof editor.blur==='function'&&
+     (tag==='INPUT'||tag==='TEXTAREA'||editor.isContentEditable)){
+    editor.blur();return true;
   }
   return false;
 }
