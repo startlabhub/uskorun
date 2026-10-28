@@ -40,7 +40,8 @@ export class ForegroundWatch {
   private timer:ReturnType<typeof setInterval>|null=null;
   private latestAt=0;
   private latestSampleTimestamp=-Infinity;
-  constructor(private readonly opts:WatchOptions){}
+  private readonly opts:WatchOptions;
+  constructor(opts:WatchOptions){this.opts=opts}
   get isRunning(){return this.active}
   start():boolean {
     // Repeat focus/visibility and double-taps must never allocate a second watch.
