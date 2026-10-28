@@ -13,7 +13,7 @@ export async function claimOffer(userId:string,offerId:string){
   if(Number(count.rows[0].count)>=Number(o.max_claims))throw new RewardError('Offer sold out',409);
   await c.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
   const points=await c.query('SELECT COALESCE(SUM(delta),0)::int AS balance FROM points_ledger WHERE user_id=$1',[userId]);
-  if(Number(points.rows[0].balance)<o.cost_points)throw new RewardError('Not enough points',409);
+  if(Number(points.rows[0].balance)<o.cost_points)throw new RewardError('Need '+Math.max(0,o.cost_points-Number(points.rows[0].balance))+' more confirmed points',409);
   const code=randomBytes(12).toString('base64url').toUpperCase();
   const r=await c.query('INSERT INTO vouchers(offer_id,user_id,code_hash,encrypted_code) VALUES($1,$2,$3,$4) RETURNING id',
    [offerId,userId,tokenHash(code),encryptCode(code)]);
