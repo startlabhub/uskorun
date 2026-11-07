@@ -95,10 +95,15 @@ export async function syncNativeQueue(
   active=result.active;
   if(result.records.length===0)return {draft:current,accepted:total,remaining:false,overflow,active};
   if(result.records.length>NATIVE_DRAIN_LIMIT)throw new Error('Native drain exceeded limit');
+  // An absent ID must never acknowledge or discard native-disk records.
+  // Throwing before persist/ACK keeps the same records for a later retry.
+  const activityId=current.activityId;
+  if(!activityId)
+   throw new Error('Native GPS activityId missing; disk fixes retained without ACK');
   const merged=mergeNativeFixes(current,result.records);
   // Critical durability boundary: ACK only after successful JS persisted write.
   persist(merged.draft);
-  await port.ack({clientId:current.clientId,activityId:current.activityId,seqs:merged.ackSeqs});
+  await port.ack({clientId:current.clientId,activityId,seqs:merged.ackSeqs});
   current=merged.draft;total+=merged.inserted;
   if(result.records.length<NATIVE_DRAIN_LIMIT)return {draft:current,accepted:total,remaining:false,overflow,active};
   remaining=true;
