@@ -33,6 +33,9 @@ export default function Home(){
  const points=useRef<GPSPoint[]>([]),activity=useRef<string|null>(null),wake=useRef<any>(null);
  const watcher=useRef<ForegroundWatch|null>(null),nativeWatcher=useRef<NativeGPSWatch|null>(null),wakeEpoch=useRef(0);
  const [nativeConsent,setNativeConsent]=useState(false);
+ const [nativeMode,setNativeMode]=useState(false);
+ useEffect(()=>{setNativeMode(nativeGPSAvailable())},[]);
+
  const [busy,setBusy]=useState(false),busyRef=useRef(false);
  const [pendingRecovery,setPendingRecovery]=useState<PendingRun|null>(null);
  const draftRef=useRef<PendingRun|null>(null),watchEpoch=useRef(0);
@@ -274,18 +277,18 @@ export default function Home(){
     {authMode==="signup"&&<><label className="small"><input type="checkbox" checked={age} onChange={e=>setAge(e.target.checked)}/> I confirm I am 18 or older.</label>
       <label className="small"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I agree to beta terms and the location privacy notice below.</label></>}
     <button className="btn" type="submit">{authMode==="signup"?"Create beta account":"Sign in"}</button></form>
-    <p className="small muted" style={{marginTop:14}}>{nativeGPSAvailable()?'Capacitor on-device GPS can continue through lock/calls while the operating system permits it; background delivery must be tested on real devices.':'Browser GPS records only while visible and awake.'} GPS can be spoofed, and no real sponsor rewards are promised yet. See privacy and beta terms below.</p>
+    <p className="small muted" style={{marginTop:14}}>{nativeMode?'Capacitor on-device GPS can continue through lock/calls while the operating system permits it; background delivery must be tested on real devices.':'Browser GPS records only while visible and awake.'} GPS can be spoofed, and no real sponsor rewards are promised yet. See privacy and beta terms below.</p>
    </div>
   </>:<>
    {tab==="home"&&<>
     <section className="hero"><span className="eyebrow">GREATER SACRAMENTO · YOUR CITY MOVES</span><h1>Walk. Run.<br/><span style={{color:"var(--lime)"}}>Earn demo points.</span></h1>
-      <p>{nativeGPSAvailable()?'The phone GPS plugin records across background / lock where permitted; the exact result still requires physical QA.':'Browser recording is foreground only.'} Demo points are only awarded after a server-accepted Finish.</p>
+      <p>{nativeMode?'The phone GPS plugin records across background / lock where permitted; the exact result still requires physical QA.':'Browser recording is foreground only.'} Demo points are only awarded after a server-accepted Finish.</p>
       <div className="row wrap"><button className="btn" onClick={()=>setTab("track")}>{hasOpenActivity?"Return to tracking →":"Start moving →"}</button>
         <button className="btn outline" onClick={()=>setTab("challenges")}>Choose goal</button><button className="btn outline" onClick={()=>setTab("rewards")}>Reward shop</button></div>
     </section>
     <div className="card accent" style={{marginTop:16}} aria-label="Activity and points">
       <div className="row wrap"><h2>{hasOpenActivity?(sessionKind==="run"?"Current run":"Current walk"):"Choose your movement"}</h2>
-       <span className="pill">{pendingRecovery?.phase==="recording"?(nativeGPSAvailable()?"NATIVE GPS RECORDING":"FOREGROUND RECORDING"):pendingRecovery?"INTERRUPTED / SAVED":"READY"}</span></div>
+       <span className="pill">{pendingRecovery?.phase==="recording"?(nativeMode?"NATIVE GPS RECORDING":"FOREGROUND RECORDING"):pendingRecovery?"INTERRUPTED / SAVED":"READY"}</span></div>
       {!pendingRecovery&&<div className="tabs" style={{marginTop:15}}>
        <button className={kind==="walk"?"active":""} onClick={()=>{setKind("walk");setTab("track")}}>Walk →</button>
        <button className={kind==="run"?"active":""} onClick={()=>{setKind("run");setTab("track")}}>Run →</button>
@@ -336,7 +339,7 @@ export default function Home(){
        !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
        <><button disabled={busy} className="btn secondary" onClick={()=>pause()}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
      </div>
-     <div className="line"/><div className="alert"><strong>{nativeGPSAvailable()?'Phone GPS · native background beta':'Foreground GPS · browser beta'}</strong><br/>{nativeGPSAvailable()?'Before granting permissions: USKORUN records your walking/running route even when the screen is locked or during a phone call, subject to operating-system restrictions. iOS may ask for Always location access; Android uses a persistent location notification. Updates are best-effort; if the app is killed, any missing distance cannot be reconstructed.':'Keep the browser visible and screen awake. Calls, tab switching, and locks interrupt web GPS; return and tap Resume.'} Raw GPS points are kept {nativeGPSAvailable()?'in this app’s local unencrypted storage until confirmed Finish or Abandon':'in this browser tab sessionStorage'} for failed Finish recovery. Server checks plausibility; GPS does not prove physical activity.</div>
+     <div className="line"/><div className="alert"><strong>{nativeMode?'Phone GPS · native background beta':'Foreground GPS · browser beta'}</strong><br/>{nativeMode?'Before granting permissions: USKORUN records your walking/running route even when the screen is locked or during a phone call, subject to operating-system restrictions. iOS may ask for Always location access; Android uses a persistent location notification. Updates are best-effort; if the app is killed, any missing distance cannot be reconstructed.':'Keep the browser visible and screen awake. Calls, tab switching, and locks interrupt web GPS; return and tap Resume.'} Raw GPS points are kept {nativeMode?'in this app’s local unencrypted storage until confirmed Finish or Abandon':'in this browser tab sessionStorage'} for failed Finish recovery. Server checks plausibility; GPS does not prove physical activity.</div>
     </div>
     <div className="section"><h2>How points work</h2></div>
     <div className="grid two"><div className="card"><div className="stat">15</div><div className="stat-label">Beta points / accepted running mile</div></div><div className="card"><div className="stat">10</div><div className="stat-label">Beta points / accepted walking mile</div></div></div>
