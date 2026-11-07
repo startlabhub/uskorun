@@ -11,9 +11,10 @@
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build:native": "node scripts/build-native.mjs",
-    "native:platforms": "npm run build:native && npx cap add ios && npx cap add android && node scripts/configure-native.mjs",
-    "native:sync": "npm run build:native && npx cap sync && node scripts/configure-native.mjs",
-    "licenses:generate": "node scripts/generate-native-licenses.mjs"
+    "native:platforms": "npm run build:native && npx cap add ios && npx cap add android && npm run native:install-owned",
+    "native:sync": "npm run build:native && npx cap sync && npm run native:install-owned",
+    "licenses:generate": "node scripts/generate-native-licenses.mjs",
+    "native:install-owned": "node scripts/configure-native.mjs && node scripts/install-durable-location.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
