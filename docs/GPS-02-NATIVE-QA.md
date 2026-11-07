@@ -46,3 +46,24 @@ The build-native script excludes route handlers from a temporary export tree, no
 3. **Sensitive GPS points are stored in localStorage in the native WebView** for process-relaunch recovery; this is not encrypted-at-rest. Before wider beta, use encrypted native storage and a privacy/retention audit. Never copy GPS trails into Github or screenshots.
 4. **Store listing/compliance:** iOS location background mode must justify essential user-initiated service; Android background location/foreground service and persistent notification require platform declarations/review. Developer accounts, signing and store review are not covered by these code commits.
 5. **No confirmed real device run** and no guarantee of background continuity or Shake to Undo fix. An iOS/Android device is a release gate.
+
+---
+
+## NATIVE-02 addendum — persistent OS queue source added (not yet compiled on devices)
+
+The original GPS-02 checklist describes the **NATIVE-01** callback-only plugin and
+correctly recorded its missing native disk queue at that time. This remains
+historical evidence, not the current implementation claim.
+
+See [GPS-03-DURABLE-NATIVE-QUEUE.md](./GPS-03-DURABLE-NATIVE-QUEUE.md):
+USKORUN now includes **uncompiled Swift and Kotlin source** for a custom
+MIT native recorder, app-private fsynced JSONL fix log, plus TS drain/ACK
+integration. These commits do **not** prove actual on-device persistence,
+OS background relaunch, or battery behavior. Re-test every GPS-02 scenario
+against the **new exact branch SHA** after Xcode and Gradle compilation.
+
+**Remaining release blockers:** unencrypted app localStorage and native route
+files (no app-managed encryption keys), Android background permission/store
+review, iOS force-quit/relaunch semantics, recovery of damaged JSONL, physical
+10-minute phone-call/lock tests, and actual API accepted Finish. No public
+deploy, stores or payments were authorized.
