@@ -34,8 +34,17 @@ test('a failed JS storage write must never ACK native disk data',async()=>{
 test('repeat drains after saved-but-lost ACK do not double-count',async()=>{
  const disk=new Disk(),original=session();disk.records=[fix(1,1000),fix(2,2000)];
  let saved=original;
- await assert.rejects(syncNativeQueue({...disk,drain:disk.drain.bind(disk),
-  ack:async()=>{throw new Error('lost ack')}} as NativeDiskPort,saved,d=>{saved=d}),/lost ack/);
+ // Spread does not include class prototype methods. Supply the complete
+ // NativeDiskPort contract in this failing-ACK mock (no unsafe type assertion).
+ const failingAckPort:NativeDiskPort={
+  begin:options=>disk.begin(options),
+  pause:()=>disk.pause(),
+  end:()=>disk.end(),
+  reset:options=>disk.reset(options),
+  drain:options=>disk.drain(options),
+  ack:async()=>{throw new Error('lost ack')}
+ };
+ await assert.rejects(syncNativeQueue(failingAckPort,saved,d=>{saved=d}),/lost ack/);
  assert.equal(saved.points.length,2);assert.equal(disk.records.length,2);
  await syncNativeQueue(disk,saved,d=>{saved=d});
  assert.equal(saved.points.length,2);assert.deepEqual(disk.acks,[[1,2]]);
@@ -73,4 +82,14 @@ test('native points preserve original timestamps; no fabricated interpolation',(
 });
 test('bad same-segment temporal order is rejected rather than sorted into fake path',()=>{
  assert.throws(()=>mergeNativeFixes(session(),[fix(1,2000),fix(2,1000)]),/ordering inconsistent/);
+});
+
+test('missing activityId leaves all native disk records unacknowledged',async()=>{
+ const disk=new Disk();disk.records=[fix(1,1000)];
+ const pending=newPendingRun('client-1','walk',1000); // starting, no activityId
+ let persisted=false;
+ await assert.rejects(syncNativeQueue(disk,pending,()=>{persisted=true}),/activityId missing/);
+ assert.equal(persisted,false);
+ assert.deepEqual(disk.acks,[]);
+ assert.equal(disk.records.length,1);
 });
