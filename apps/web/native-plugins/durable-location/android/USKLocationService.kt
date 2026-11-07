@@ -55,7 +55,10 @@ class USKLocationService:Service(),LocationListener {
             val open=packageManager.getLaunchIntentForPackage(packageName)
             val pending=PendingIntent.getActivity(this,0,open ?: Intent(this, MainActivity::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val notification=Notification.Builder(this,CHANNEL)
+            val notificationBuilder=if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)
+                Notification.Builder(this,CHANNEL)
+            else Notification.Builder(this)
+            val notification=notificationBuilder
                 .setContentTitle("USKORUN is recording location")
                 .setContentText("Walking/running route active; tap to Pause or Finish.")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
