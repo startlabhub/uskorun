@@ -81,26 +81,27 @@ export function nativeResumeKind(run:PendingRun):NativeBegin{
 }
 
 export type NativeDiskSyncResult={
- draft:PendingRun;accepted:number;remaining:boolean;overflow:boolean
+ draft:PendingRun;accepted:number;remaining:boolean;overflow:boolean;active:boolean
 };
 export async function syncNativeQueue(
  port:NativeDiskPort,draft:PendingRun,
  persist:(updated:PendingRun)=>void
 ):Promise<NativeDiskSyncResult>{
- let current=draft,total=0,remaining=false,overflow=false;
+ let current=draft,total=0,remaining=false,overflow=false,active=false;
  // Drain bounded pages. Infinite loops are forbidden on malformed native ports.
  for(let page=0;page<25;page++){
   const result=await port.drain({limit:NATIVE_DRAIN_LIMIT});
   overflow ||= result.overflow;
-  if(result.records.length===0)return {draft:current,accepted:total,remaining:false,overflow};
+  active=result.active;
+  if(result.records.length===0)return {draft:current,accepted:total,remaining:false,overflow,active};
   if(result.records.length>NATIVE_DRAIN_LIMIT)throw new Error('Native drain exceeded limit');
   const merged=mergeNativeFixes(current,result.records);
   // Critical durability boundary: ACK only after successful JS persisted write.
   persist(merged.draft);
   await port.ack({clientId:current.clientId,activityId:current.activityId,seqs:merged.ackSeqs});
   current=merged.draft;total+=merged.inserted;
-  if(result.records.length<NATIVE_DRAIN_LIMIT)return {draft:current,accepted:total,remaining:false,overflow};
+  if(result.records.length<NATIVE_DRAIN_LIMIT)return {draft:current,accepted:total,remaining:false,overflow,active};
   remaining=true;
  }
- return {draft:current,accepted:total,remaining,overflow};
+ return {draft:current,accepted:total,remaining,overflow,active};
 }
