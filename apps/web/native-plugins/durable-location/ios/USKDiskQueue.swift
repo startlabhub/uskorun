@@ -51,11 +51,19 @@ final class USKDiskQueue {
     private init() {
         // All public methods are called on the main queue (CLLocation delegate).
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // Keep the GPS log writable while the screen is locked. Apple
+        // .completeUntilFirstUserAuthentication unlocks at first device unlock
+        // and stays available on later locks. .complete blocks locked writes;
+        // .completeUnlessOpen is unsuitable for this per-fix open/close log.
+        // After a reboot, recording cannot access this log before first unlock.
         directory = base.appendingPathComponent("USKORUNNativeGPS", isDirectory: true)
         metadataURL = directory.appendingPathComponent("state-v1.json")
         fixesURL = directory.appendingPathComponent("fixes-v1.jsonl")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            // Explicit directory protection, including freshly-created files.
+            try FileManager.default.setAttributes([.protectionKey:
+                FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: directory.path)
             var attr = URLResourceValues()
             attr.isExcludedFromBackup = true
             var url = directory
@@ -194,6 +202,9 @@ final class USKDiskQueue {
         meta = USKMeta()
         do {
             try Data().write(to: fixesURL, options: .atomic)
+            // Atomic replacement creates a new inode: reapply protection.
+            try FileManager.default.setAttributes([.protectionKey:
+                FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: fixesURL.path)
             try persistMeta()
         } catch {
             meta = oldMeta
