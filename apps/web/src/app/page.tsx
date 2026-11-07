@@ -350,6 +350,10 @@ export default function Home(){
     setGpsNote('Finish not confirmed. Native fixes saved locally; Retry Finish with same activity ID.');return;
    }
    if(nativeGPSAvailable()&&nativePort.current){
+    // Fail closed if the activity ID is unexpectedly lost. Do not reset
+    // or discard the native queue without a verified session identity.
+    if(!frozen.activityId)
+     throw new Error('Activity ID missing; native GPS queue retained for recovery');
     // Do not clear user route if native disk still has unacknowledged points.
     await syncNativePoints();
     await nativePort.current.reset({clientId:frozen.clientId,activityId:frozen.activityId});
