@@ -513,7 +513,14 @@ export default function Home(){
     <p className="tiny muted" style={{marginTop:10}}>Joining a new team affects only future miles. Existing contributions remain with their original team.</p>
    </>}
    {tab==="profile"&&<><div className="section"><div><span className="eyebrow">PROFILE</span><h2>Your journey</h2></div></div><div className="card"><p className="small muted">{me.email}</p><div className="space"/><div className="grid two"><div><div className="stat">{data.points}</div><p className="muted small">Current balance</p></div><div><div className="stat">{mi(data.activities.filter(a=>a.status==="accepted").reduce((sum,a)=>sum+a.distance_miles,0))}</div><p className="muted small">Accepted miles</p></div></div><div className="space"/><button className="btn secondary small" onClick={()=>share("Move with me on USKORUN!",invite())}>Invite a friend ↗</button></div>
-    <div className="section"><h2>Recent activity</h2></div><div className="stack">{data.activities.length?data.activities.map(a=><div className="card row" key={a.id}><div><h3>{a.kind==="run"?"🏃 Run":"🚶 Walk"} · {mi(a.distance_miles)} mi</h3><p className="tiny muted">{new Date(a.started_at).toLocaleDateString()} · {a.reason}</p></div><span className={"pill "+(a.status!=="accepted"?"demo":"")}>{a.status}</span></div>):<div className="card muted">No activities yet. Start moving!</div>}</div><div className="space"/><button className="btn danger small" onClick={async()=>{if(await act("logout")){clearWatch();saveDraft(null);setTab("home");setNotice("Signed out")}}}>Sign out</button>
+    <div className="section"><h2>Recent activity</h2></div><div className="stack">{data.activities.length?data.activities.map(a=><div className="card row" key={a.id}><div><h3>{a.kind==="run"?"🏃 Run":"🚶 Walk"} · {mi(a.distance_miles)} mi</h3><p className="tiny muted">{new Date(a.started_at).toLocaleDateString()} · {a.reason}</p></div><span className={"pill "+(a.status!=="accepted"?"demo":"")}>{a.status}</span></div>):<div className="card muted">No activities yet. Start moving!</div>}</div><div className="space"/><button className="btn danger small" onClick={async()=>{
+     if(draftRef.current){
+      setTab('track');
+      setProblem('Finish or Abandon the saved GPS session before signing out. Native background recording must not be orphaned.');
+      return;
+     }
+     if(await act("logout")){clearWatch();saveDraft(null);setTab("home");setNotice("Signed out")}
+    }}>Sign out</button>
     {["merchant","admin"].includes(role)&&<button className="btn secondary small" style={{marginLeft:12}} onClick={()=>setTab("merchant")}>Partner demo dashboard →</button>}
    </>}
    {tab==="merchant"&&<><div className="section"><div><span className="eyebrow">PARTNER VERIFICATION · DEMO</span><h2>Redeem a one-time voucher</h2></div></div>
