@@ -37,10 +37,10 @@ test('repeat drains after saved-but-lost ACK do not double-count',async()=>{
  // Spread does not include class prototype methods. Supply the complete
  // NativeDiskPort contract in this failing-ACK mock (no unsafe type assertion).
  const failingAckPort:NativeDiskPort={
-  begin:options=>disk.begin(options),
+  begin:()=>disk.begin(),
   pause:()=>disk.pause(),
   end:()=>disk.end(),
-  reset:options=>disk.reset(options),
+  reset:()=>disk.reset(),
   drain:options=>disk.drain(options),
   ack:async()=>{throw new Error('lost ack')}
  };
