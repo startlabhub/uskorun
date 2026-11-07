@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {boundedFetch,localQARequest} from '../src/domain/api-client.ts';
+import {boundedFetch,localQARequest,apiFetch,NATIVE_LOCAL_QA} from '../src/domain/api-client.ts';
 test('bounded action fetch aborts after deadline and clears indefinite busy condition',async()=>{
  let signal:AbortSignal|undefined;
  const fetcher=async(_path:RequestInfo|URL,init?:RequestInit):Promise<Response>=>{
@@ -37,4 +37,16 @@ test('local QA never supports signup, rewards, merchant privileges',async()=>{
 test('local QA Abandon is a local-only terminal response, with no server write',async()=>{
  const r=localQARequest('/api/action',{method:'POST',body:JSON.stringify({action:'abandon',activityId:'local-qa:foo'})});
  assert.deepEqual(await r.json(),{ok:true,status:'abandoned'});
+});
+
+test('local-only recording ID cannot ever be submitted to a real API',async()=>{
+ if(NATIVE_LOCAL_QA)return; // Native offline bundle never sends API requests.
+ let called=false;
+ await assert.rejects(
+  apiFetch('/api/action',{method:'POST',body:JSON.stringify({
+   action:'finish',activityId:'local-qa:123',points:[]})},100,async()=>{
+    called=true;return new Response('{}');
+   }),
+  /Local QA recording cannot be sent/);
+ assert.equal(called,false);
 });
