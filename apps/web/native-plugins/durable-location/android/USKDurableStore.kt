@@ -216,13 +216,24 @@ class USKDurableStore private constructor(context: Context) {
     @Synchronized fun drain(limit:Int):USKDrainResult{
         ensureHealthy()
         require(limit in 1..500){"Drain limit must be 1..500"}
-        return USKDrainResult(readAll().filter{it.seq>ackThrough}.take(limit),
+        val rows=try{
+            readAll()
+        }catch(e:Exception){
+            // Key loss may be noticed while already running, not only
+            // during process startup. Recover without crashing the service.
+            recoverUnreadableQueue(e)
+            emptyList()
+        }
+        // No fix after key loss can be credited: drain exposes the warning
+        // and the JS contract refuses ACK/Finish for the lost activity.
+        return USKDrainResult(rows.filter{it.seq>ackThrough}.take(limit),
             isActive(),overflow,lostReason)
     }
     @Synchronized fun ack(clientId:String,activityId:String,seqs:List<Int>):Int{
         ensureHealthy()
         val run=activeRun?:throw IllegalStateException("No native session")
         require(run.clientId==clientId&&run.activityId==activityId){"ACK session mismatch"}
+        require(lostReason==null){"Native GPS queue loss; ACK forbidden"}
         val pending=readAll().filter{it.seq>ackThrough}
         require(pending.take(seqs.size).map{it.seq}==seqs){"ACK must be contiguous prefix"}
         if(seqs.isNotEmpty()){
