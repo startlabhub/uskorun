@@ -10,6 +10,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import org.json.JSONArray
+import org.json.JSONObject
 
 @CapacitorPlugin(
     name="USKDurableLocation",
@@ -91,10 +92,16 @@ class USKDurableLocationPlugin:Plugin() {
     }
     @PluginMethod fun drain(call:PluginCall){
         try{
-            val (records,active,overflow)=disk.drain(call.getInt("limit")?:500)
+            val result=disk.drain(call.getInt("limit")?:500)
             val arr=JSONArray()
-            records.forEach{arr.put(it.toJson())}
-            val r=JSObject();r.put("records",arr);r.put("active",active);r.put("overflow",overflow)
+            result.records.forEach{arr.put(it.toJson())}
+            val r=JSObject()
+            r.put("records",arr)
+            r.put("active",result.active)
+            r.put("overflow",result.overflow)
+            // A stable, app-visible loss warning, including after a relaunch.
+            // Never expose original fix coordinates, ciphertext or key material.
+            r.put("loss",result.loss?:JSONObject.NULL)
             call.resolve(r)
         }catch(e:Exception){call.reject(e.message?:"Cannot drain GPS")}
     }
