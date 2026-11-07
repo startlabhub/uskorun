@@ -325,18 +325,33 @@ export default function Home(){
  }
  async function stop(){
   if(busyRef.current){setProblem('An action is in progress; Finish cannot start yet.');return}
-  clearWatch();setTracking(false);setPaused(true);
-  const d=draftRef.current;if(!d?.activityId){setGpsNote('Retry Start first to recover server ID');return}
-  const frozen=withPendingFinish(d);saveDraft(frozen);
   busyRef.current=true;setBusy(true);
+  clearWatch();setTracking(false);setPaused(true);
   try{
+   if(nativeGPSAvailable()&&nativePort.current){
+    // End OS collection before snapshotting the Finish payload.
+    await nativePort.current.end();
+    nativeActive.current=false;stopNativePoll();
+    await syncNativePoints(); // all queued, real fixes must be persisted/ACKed first
+   }
+   const d=draftRef.current;
+   if(!d?.activityId){setGpsNote('Retry Start first to recover server ID');return}
+   const frozen=withPendingFinish(d);saveDraft(frozen);
    const r=await act('finish',{activityId:frozen.activityId,points:frozen.points});
    if(!r||!['accepted','rejected','review','abandoned'].includes(r.status)){
-    setGpsNote('Finish not confirmed. GPS data saved locally — Retry Finish. Native QA does not award points without a server.');return;
+    setGpsNote('Finish not confirmed. Native fixes saved locally; Retry Finish with same activity ID.');return;
+   }
+   if(nativeGPSAvailable()&&nativePort.current){
+    // Do not clear user route if native disk still has unacknowledged points.
+    await syncNativePoints();
+    await nativePort.current.reset({clientId:frozen.clientId,activityId:frozen.activityId});
    }
    saveDraft(null);points.current=[];activity.current=null;
    setNotice(r.status==='accepted'?`Recorded ${mi(r.miles)} mi.`:`Session not credited: ${r.reason}`);
    setTab('profile');
+  }catch(e){
+   setProblem('Finish blocked; native route retained for retry: '+String(e));
+   setGpsNote('GPS data is preserved on disk. Resolve native queue error before retrying Finish.');
   }finally{busyRef.current=false;setBusy(false)}
  }
  async function abandon(){
@@ -345,14 +360,23 @@ export default function Home(){
   if(busyRef.current){setProblem('Wait for the current action before abandoning.');return}
   busyRef.current=true;setBusy(true);
   try{
-   // If first start response was lost, replay exact clientId to recover server ID.
    let id=d.activityId;
-   if(!id){const r=await act('start',{kind:d.kind,clientId:d.clientId});if(!r)return;id=r.activityId;}
-   const r=await act('abandon',{activityId:id});
-   if(!r)return;
+   if(!id){
+    const r=await act('start',{kind:d.kind,clientId:d.clientId});
+    if(!r)return;id=r.activityId;
+   }
+   if(nativeGPSAvailable()&&nativePort.current){
+    await nativePort.current.end();nativeActive.current=false;stopNativePoll();
+    await syncNativePoints();
+   }
+   const result=await act('abandon',{activityId:id});
+   if(!result)return;
+   if(nativeGPSAvailable()&&nativePort.current && d.activityId)
+    await nativePort.current.reset({clientId:d.clientId,activityId:d.activityId});
    clearWatch();saveDraft(null);activity.current=null;points.current=[];
-   setTracking(false);setPaused(false);setNotice('Run closed with status: '+r.status);
-  }finally{busyRef.current=false;setBusy(false)}
+   setTracking(false);setPaused(false);setNotice('Run closed with status: '+result.status);
+  }catch(e){setProblem('Abandon not cleared; native route retained: '+String(e))}
+  finally{busyRef.current=false;setBusy(false)}
  }
  async function share(text:string,url:string){
   try{if(navigator.share)await navigator.share({title:"USKORUN",text,url});
