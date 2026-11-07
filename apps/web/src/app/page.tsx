@@ -126,32 +126,40 @@ export default function Home(){
   void wake.current?.release?.().catch?.(()=>{});
   wake.current=null;
  }
- function observe(){
-  if(!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');pause('GPS unavailable. Tap Resume after location access is restored.');return}
-  if(!watcher.current){
-   watcher.current=new ForegroundWatch({
-    geo:navigator.geolocation,
-    clock:browserWatchClock,
-    visible:()=>document.visibilityState==='visible',
-    onFix:({coords,timestamp})=>{
-     const d=draftRef.current;
-     if(d?.phase!=='recording')return;
-     const raw={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
-     if(raw.accuracy>50){setGpsNote('Weak GPS accuracy: no distance credited for this fix');return}
-     try{
-      const updated=withFix(d,raw);
-      saveDraft(updated);points.current=updated.points;setFixCount(points.current.length);
-      const track=assessGPS(points.current,updated.kind,points.current[0].t-1000,Date.now()+1000);
-      setLiveMiles(track.miles);
-      setGpsNote('GPS accuracy ±'+Math.round(raw.accuracy)+'m');
-     }catch(e:any){pause(String(e.message||'GPS sample failed. Tap Resume.'))}
-    },
-    onInterrupted:reason=>pause(reason)
-   });
+ function onPosition({coords,timestamp}:PositionSample){
+  const d=draftRef.current;
+  if(d?.phase!=='recording')return;
+  const raw={lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,t:timestamp};
+  if(raw.accuracy>50){setGpsNote('Weak GPS accuracy: no distance credited for this fix');return}
+  try{
+   const updated=withFix(d,raw);
+   saveDraft(updated);points.current=updated.points;setFixCount(points.current.length);
+   const track=assessGPS(points.current,updated.kind,points.current[0].t-1000,Date.now()+1000);
+   setLiveMiles(track.miles);
+   setGpsNote('GPS accuracy ±'+Math.round(raw.accuracy)+'m'+(nativeGPSAvailable()?' · native location':''));
+  }catch(e:any){pause(String(e.message||'GPS sample failed. Tap Resume.'))}
+ }
+ async function observe(){
+  if(nativeGPSAvailable()){
+   if(!nativeWatcher.current)nativeWatcher.current=createNativeGPSWatch(
+    onPosition,reason=>pause(reason)
+   );
+   const started=await nativeWatcher.current.start();
+   if(!started&&draftRef.current?.phase==='recording')
+    pause('Native GPS did not start. Check location permission and tap Resume.');
+   return;
   }
+  if(!geoloc(typeof navigator!=='undefined')){
+   setProblem('GPS unavailable');pause('GPS unavailable. Tap Resume after location access is restored.');return;
+  }
+  if(!watcher.current)watcher.current=new ForegroundWatch({
+   geo:navigator.geolocation,clock:browserWatchClock,
+   visible:()=>document.visibilityState==='visible',
+   onFix:onPosition,onInterrupted:reason=>pause(reason)
+  });
   if(!watcher.current.start())return;
   const epoch=++wakeEpoch.current;
-  // Wake Lock is a foreground hint only; it cannot grant background GPS.
+  // Wake Lock only improves foreground web tracking; not native background.
   try{
    (navigator as any).wakeLock?.request('screen').then((lock:any)=>{
     if(epoch!==wakeEpoch.current||!watcher.current?.isRunning){
