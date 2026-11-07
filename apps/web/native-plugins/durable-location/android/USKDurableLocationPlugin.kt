@@ -16,6 +16,9 @@ import org.json.JSONArray
     permissions=[Permission(
         strings=[Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION],
         alias="location"
+    ), Permission(
+        strings=[Manifest.permission.ACCESS_BACKGROUND_LOCATION],
+        alias="background"
     )]
 )
 class USKDurableLocationPlugin:Plugin() {
@@ -38,6 +41,26 @@ class USKDurableLocationPlugin:Plugin() {
         beginGranted(call)
     }
     private fun beginGranted(call:PluginCall) {
+        if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q &&
+           context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+            // Android 10 can grant here; Android 11+ may require the user to
+            // choose "Allow all the time" in app permission Settings.
+            // Never silently claim background tracking without authorization.
+            requestPermissionForAlias("background",call,"onBackgroundPermission")
+            return
+        }
+        startDurableService(call)
+    }
+    @PermissionCallback
+    private fun onBackgroundPermission(call:PluginCall){
+        if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q &&
+           context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+            call.reject("Background location not authorized. Grant 'Allow all the time' for USKORUN in Android location permissions, then tap Resume.")
+            return
+        }
+        startDurableService(call)
+    }
+    private fun startDurableService(call:PluginCall) {
         val client=call.getString("clientId")
         val activity=call.getString("activityId")
         val kind=call.getString("kind")
