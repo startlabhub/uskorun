@@ -11,7 +11,6 @@ const config:CapacitorConfig={
  appId:'com.uskorun.app',
  appName:'USKORUN',
  webDir:'native-dist',
- bundledWebRuntime:false,
  android:{useLegacyBridge:true},
  server:{androidScheme:'https',iosScheme:'capacitor'}
 };
