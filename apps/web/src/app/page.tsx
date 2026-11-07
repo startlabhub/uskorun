@@ -256,6 +256,7 @@ export default function Home(){
  if(loading)return <main className="shell"><div className="logo">USKO<b>RUN</b></div><p className="muted">Loading your movement…</p></main>;
  return <main className="shell">
   <header className="top"><div className="row"><span className="logo-small">↗</span><span className="logo">USKO<b>RUN</b></span></div><span className="tag">SACRAMENTO BETA</span></header>
+  {NATIVE_LOCAL_QA&&<div className="alert" role="status" style={{marginBottom:14}}><strong>LOCAL NATIVE QA · NO SERVER</strong><br/>Real GPS samples can be recorded on the phone. No account is created, Finish cannot be server-confirmed and no points or vouchers are awarded. Use Abandon to clear this local QA session.</div>}
   {problem&&<div role="alert" className="alert error" style={{marginBottom:14}}>{problem}</div>}
   {notice&&<div role="status" className="alert" style={{marginBottom:14}}>{notice}</div>}
   {!me?<>
@@ -273,18 +274,18 @@ export default function Home(){
     {authMode==="signup"&&<><label className="small"><input type="checkbox" checked={age} onChange={e=>setAge(e.target.checked)}/> I confirm I am 18 or older.</label>
       <label className="small"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I agree to beta terms and the location privacy notice below.</label></>}
     <button className="btn" type="submit">{authMode==="signup"?"Create beta account":"Sign in"}</button></form>
-    <p className="small muted" style={{marginTop:14}}>Beta: GPS tracking works only while the app is foregrounded and the screen stays awake. GPS can be spoofed, and no real sponsor rewards are promised yet. See privacy and beta terms below.</p>
+    <p className="small muted" style={{marginTop:14}}>{nativeGPSAvailable()?'Capacitor on-device GPS can continue through lock/calls while the operating system permits it; background delivery must be tested on real devices.':'Browser GPS records only while visible and awake.'} GPS can be spoofed, and no real sponsor rewards are promised yet. See privacy and beta terms below.</p>
    </div>
   </>:<>
    {tab==="home"&&<>
     <section className="hero"><span className="eyebrow">GREATER SACRAMENTO · YOUR CITY MOVES</span><h1>Walk. Run.<br/><span style={{color:"var(--lime)"}}>Earn demo points.</span></h1>
-      <p>Movement is recorded in the foreground. Earn demo points only when the server accepts your finished activity.</p>
+      <p>{nativeGPSAvailable()?'The phone GPS plugin records across background / lock where permitted; the exact result still requires physical QA.':'Browser recording is foreground only.'} Demo points are only awarded after a server-accepted Finish.</p>
       <div className="row wrap"><button className="btn" onClick={()=>setTab("track")}>{hasOpenActivity?"Return to tracking →":"Start moving →"}</button>
         <button className="btn outline" onClick={()=>setTab("challenges")}>Choose goal</button><button className="btn outline" onClick={()=>setTab("rewards")}>Reward shop</button></div>
     </section>
     <div className="card accent" style={{marginTop:16}} aria-label="Activity and points">
       <div className="row wrap"><h2>{hasOpenActivity?(sessionKind==="run"?"Current run":"Current walk"):"Choose your movement"}</h2>
-       <span className="pill">{pendingRecovery?.phase==="recording"?"FOREGROUND RECORDING":pendingRecovery?"INTERRUPTED / SAVED":"READY"}</span></div>
+       <span className="pill">{pendingRecovery?.phase==="recording"?(nativeGPSAvailable()?"NATIVE GPS RECORDING":"FOREGROUND RECORDING"):pendingRecovery?"INTERRUPTED / SAVED":"READY"}</span></div>
       {!pendingRecovery&&<div className="tabs" style={{marginTop:15}}>
        <button className={kind==="walk"?"active":""} onClick={()=>{setKind("walk");setTab("track")}}>Walk →</button>
        <button className={kind==="run"?"active":""} onClick={()=>{setKind("run");setTab("track")}}>Run →</button>
@@ -319,7 +320,8 @@ export default function Home(){
    {tab==="track"&&<><div className="section"><div><span className="eyebrow">TRACKING</span><h2>Your movement matters</h2></div></div>
     {pendingRecovery&&!tracking&&<div className="alert" role="status" style={{marginBottom:14}}><strong>Activity paused — GPS not recording</strong><br/>{pendingRecovery.phase==='pending_finish'?'Finish was not confirmed. Your GPS samples are saved — retry Finish or abandon.':pendingRecovery.phase==='starting'?'Start was not confirmed. Retry Start with the same session ID or abandon.':'Your activity was interrupted or paused. Return to this screen and tap Resume to start a new GPS segment; missed distance is not counted.'}</div>}
     <div className="card accent">
-     <div className="tabs" style={{justifyContent:"center"}}><button disabled={!!pendingRecovery} className={sessionKind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={!!pendingRecovery} className={sessionKind==="walk"?"active":""} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
+     <div className="tabs" style={{justifyContent:"center"}}><button title={pendingRecovery?'Activity kind is locked until Finish or Abandon.':''} disabled={!!pendingRecovery} className={sessionKind==="run"?"active":""} onClick={()=>setKind("run")}>🏃 Run</button><button disabled={!!pendingRecovery} className={sessionKind==="walk"?"active":""} title={pendingRecovery?'Activity kind is locked until Finish or Abandon.':''} onClick={()=>setKind("walk")}>🚶 Walk</button></div>
+     {pendingRecovery&&<p className="small muted" role="status" style={{textAlign:"center",marginTop:10}}>Run/Walk selection locked for saved {pendingRecovery.kind} activity. {pendingRecovery.phase==='pending_finish'?'Retry Finish or Abandon before starting another.':pendingRecovery.phase==='paused'?'Resume, Finish or Abandon this session first.':'Keep this activity or Abandon; a second Start is not allowed.'}</p>}
      <div className="track-circle"><div className="stat">{liveMiles.toFixed(2)}</div><div className="muted small">MILES · provisional</div></div>
      <div className="grid two">
       <div className="card"><div className="stat">{estimatedPoints}</div><div className="stat-label">Estimated session points · unconfirmed</div></div>
@@ -330,11 +332,11 @@ export default function Home(){
      <div className="track-control">
       {pendingRecovery?.phase==='pending_finish'?<><button disabled={busy} className="btn" onClick={stop}>Retry Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
        !tracking&&pendingRecovery?.phase==='starting'?<><button disabled={busy} className="btn" onClick={start}>Retry Start</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
-       !tracking&&pendingRecovery?.phase==='paused'?<><button disabled={busy} className="btn secondary" onClick={resume}>▶ Resume</button><button disabled={busy} className="btn" onClick={stop}>Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
+       !tracking&&pendingRecovery?.phase==='paused'?<><button disabled={busy} className="btn" onClick={resume}>▶ Resume</button><button disabled={busy} className="btn secondary" onClick={stop}>Finish</button><button disabled={busy} className="btn danger" onClick={abandon}>Abandon</button></>:
        !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
        <><button disabled={busy} className="btn secondary" onClick={()=>pause()}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
      </div>
-     <div className="line"/><div className="alert"><strong>Foreground GPS beta</strong><br/>Keep this page visible and screen awake. Calls, app switching, and screen locks interrupt browser GPS. Return and tap Resume; unrecorded distance cannot be recovered. Raw GPS samples remain in this browser tab sessionStorage for failed Finish recovery until success or Abandon. Server checks plausibility; GPS cannot prove physical activity.</div>
+     <div className="line"/><div className="alert"><strong>{nativeGPSAvailable()?'Phone GPS · native background beta':'Foreground GPS · browser beta'}</strong><br/>{nativeGPSAvailable()?'Before granting permissions: USKORUN records your walking/running route even when the screen is locked or during a phone call, subject to operating-system restrictions. iOS may ask for Always location access; Android uses a persistent location notification. Updates are best-effort; if the app is killed, any missing distance cannot be reconstructed.':'Keep the browser visible and screen awake. Calls, tab switching, and locks interrupt web GPS; return and tap Resume.'} Raw GPS points are kept {nativeGPSAvailable()?'in this app’s local unencrypted storage until confirmed Finish or Abandon':'in this browser tab sessionStorage'} for failed Finish recovery. Server checks plausibility; GPS does not prove physical activity.</div>
     </div>
     <div className="section"><h2>How points work</h2></div>
     <div className="grid two"><div className="card"><div className="stat">15</div><div className="stat-label">Beta points / accepted running mile</div></div><div className="card"><div className="stat">10</div><div className="stat-label">Beta points / accepted walking mile</div></div></div>
@@ -391,7 +393,7 @@ export default function Home(){
     </>}
    </>}
   </>}
-  <footer className="footer"><strong>USKORUN · Independent sports startup</strong><br/>Closed-development beta. GPS tracks are processed for distance plausibility; raw routes are not retained in the database. Never use your phone while crossing roads. No medical, financial or commercial guarantees. 18+ only. Demo offers are not real discounts. Contact support through the project administrator before testing with real personal location data.</footer>
+  <footer className="footer"><strong>USKORUN · Independent sports startup</strong><br/>Closed-development beta. GPS tracks are processed for distance plausibility; raw routes are not retained in the database. Never use your phone while crossing roads. No medical, financial or commercial guarantees. 18+ only. Demo offers are not real discounts. Contact support through the project administrator before testing with real personal location data. <a href="/about/">About · Licenses</a>.</footer>
   {me&&<nav className="bottom" aria-label="App navigation">{([["home","⌂","Home"],["challenges","⚑","Goals"],["track","◉","Track"],["rewards","♢","Shop"],["teams","☷","Teams"],["profile","♙","Me"]] as [Tab,string,string][]).map(([id,icon,label])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}><span>{icon}</span>{label}</button>)}</nav>}
  </main>
 }
