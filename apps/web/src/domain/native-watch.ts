@@ -28,12 +28,18 @@ export class NativeGPSWatch{
   private adding=false;
   private generation=0;
   private latestTimestamp=-Infinity;
+  private readonly plugin:NativeGPSPlugin;
+  private readonly onFix:(p:PositionSample)=>void;
+  private readonly onInterrupted:(reason:string)=>void;
+  private readonly clock:()=>number;
   constructor(
-    private readonly plugin:NativeGPSPlugin,
-    private readonly onFix:(p:PositionSample)=>void,
-    private readonly onInterrupted:(reason:string)=>void,
-    private readonly clock:()=>number=()=>Date.now()
-  ){}
+    plugin:NativeGPSPlugin,
+    onFix:(p:PositionSample)=>void,
+    onInterrupted:(reason:string)=>void,
+    clock:()=>number=()=>Date.now()
+  ){
+    this.plugin=plugin;this.onFix=onFix;this.onInterrupted=onInterrupted;this.clock=clock;
+  }
   get isRunning(){return this.active}
   async start():Promise<boolean>{
     if(this.active||this.adding)return false;
