@@ -6,6 +6,10 @@ import {newPendingRun,withStartedId,withPause,withResume,withFix,withPendingFini
 import type {PendingRun} from "@/domain/pending";
 import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-handoff";
 import {ForegroundWatch,browserWatchClock,blurEditingFocus} from "@/domain/foreground-watch";
+import type {PositionSample} from "@/domain/foreground-watch";
+import {NativeGPSWatch} from "@/domain/native-watch";
+import {nativeGPSAvailable,createNativeGPSWatch} from "@/domain/gps-platform";
+import {apiFetch,NATIVE_LOCAL_QA} from "@/domain/api-client";
 import {preliminaryActivityPoints,preliminaryPointsNote,remainingConfirmedPoints,canClaimDemoOffer,nextDemoReward,selectedJoinedGoal} from "@/domain/experience";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
 type Challenge={id:string;title:string;city:string;details:string;target_miles:number;ends_at:string;progress_miles:number;active_people:number};
@@ -27,18 +31,22 @@ export default function Home(){
  const [teamName,setTeamName]=useState(""),[teamCode,setTeamCode]=useState(""),[redeemCode,setRedeemCode]=useState("");
  const [partnerStats,setPartnerStats]=useState<PartnerStats[]|null>(null),[partnerRefresh,setPartnerRefresh]=useState(0);
  const points=useRef<GPSPoint[]>([]),activity=useRef<string|null>(null),wake=useRef<any>(null);
- const watcher=useRef<ForegroundWatch|null>(null),wakeEpoch=useRef(0);
+ const watcher=useRef<ForegroundWatch|null>(null),nativeWatcher=useRef<NativeGPSWatch|null>(null),wakeEpoch=useRef(0);
+ const [nativeConsent,setNativeConsent]=useState(false);
  const [busy,setBusy]=useState(false),busyRef=useRef(false);
  const [pendingRecovery,setPendingRecovery]=useState<PendingRun|null>(null);
  const draftRef=useRef<PendingRun|null>(null),watchEpoch=useRef(0);
  function saveDraft(d:PendingRun|null){
   draftRef.current=d;setPendingRecovery(d);
-  if(d){try{writePendingRun(sessionStorage,d)}catch{setGpsNote('Storage unavailable: do not close tab before finish')}}
-  else{try{clearPendingRun(sessionStorage)}catch{}}
+  // A native WebView may be terminated after a call; localStorage persists
+  // pending unconfirmed fixes across app relaunch. Browser stays session-only.
+  const storage=nativeGPSAvailable()?localStorage:sessionStorage;
+  if(d){try{writePendingRun(storage,d)}catch{setGpsNote('Storage unavailable: do not close the app before finish')}}
+  else{try{clearPendingRun(storage)}catch{}}
  }
 
  async function refresh(){
-  try{const r=await fetch("/api/data",{cache:"no-store"});if(!r.ok)throw new Error("Data service unavailable");
+  try{const r=await apiFetch("/api/data",{cache:"no-store"});if(!r.ok)throw new Error("Data service unavailable");
    const json=await r.json();setData(json);
    // Recovery when browser storage was cleared but the server still has a recording.
    const orphan=json.user && json.activities?.find((a:any)=>a.status==='recording');
@@ -55,7 +63,7 @@ export default function Home(){
   // QR bearer token is in URL fragment only; clear immediately from history.
   const code=parseAndScrubVoucherFragment(window.location,window.history);
   if(code){setRedeemCode(code);setTab('merchant')}
-  const old=readPendingRun(sessionStorage);
+  const old=readPendingRun(nativeGPSAvailable()?localStorage:sessionStorage);
   if(old){const paused=old.phase==='recording'?withPause(old):old;
    saveDraft(paused);activity.current=paused.activityId;points.current=paused.points;
    setKind(paused.kind);setFixCount(paused.points.length);
@@ -67,14 +75,18 @@ export default function Home(){
    if(!code)setTab('track');
   }
   const onVisibility=()=>{
+   // Capacitor's native watcher stays active across calls, lock and background.
+   // Only the standard browser watcher pauses on hidden/pagehide.
+   if(nativeGPSAvailable())return;
    if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording'&&!watcher.current?.isRunning)
     pause('App hidden: recording interrupted. Return and tap Resume.');
    watcher.current?.visibilityChanged();
   };
   const onPageHide=()=>{
-   if(draftRef.current?.phase==='recording')pause('App interrupted: return and tap Resume.');
+   if(!nativeGPSAvailable()&&draftRef.current?.phase==='recording')
+    pause('App interrupted: return and tap Resume.');
   };
-  const onFocus=()=>watcher.current?.focus(); // Never auto-resume on returning from a call.
+  const onFocus=()=>{if(!nativeGPSAvailable())watcher.current?.focus()};
   document.addEventListener('visibilitychange',onVisibility);
   window.addEventListener('pagehide',onPageHide);
   window.addEventListener('focus',onFocus);
@@ -88,14 +100,14 @@ export default function Home(){
  useEffect(()=>{
   if(tab!=="merchant"||!["merchant","admin"].includes(data.user?.role||"")){setPartnerStats(null);return}
   let cancelled=false;
-  fetch("/api/partner-summary",{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error("Partner summary unavailable");return r.json()})
+  apiFetch("/api/partner-summary",{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error("Partner summary unavailable");return r.json()})
    .then(v=>{if(!cancelled)setPartnerStats(v.offers)})
    .catch(()=>{if(!cancelled)setPartnerStats(null)});
   return()=>{cancelled=true};
  },[tab,data.user?.role,partnerRefresh]);
  async function act(action:string,payload:any={}){
   setProblem("");setNotice("");
-  try{const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
+  try{const r=await apiFetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
    const json=await r.json();if(!r.ok)throw new Error(json.error||"Request failed");
    await refresh();return json;
   }catch(e:any){setProblem(e.message||"Request failed");return null}
@@ -109,7 +121,7 @@ export default function Home(){
  }
  const geoloc=(navigatorAvailable:boolean)=>navigatorAvailable&&"geolocation" in navigator;
  function clearWatch(){
-  watcher.current?.stop();
+  watcher.current?.stop();nativeWatcher.current?.stop();
   wakeEpoch.current++;
   void wake.current?.release?.().catch?.(()=>{});
   wake.current=null;
