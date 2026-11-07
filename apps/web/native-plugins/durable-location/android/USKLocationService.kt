@@ -53,7 +53,7 @@ class USKLocationService:Service(),LocationListener {
         // may prevent restart. Never create a new session automatically.
         try{
             val open=packageManager.getLaunchIntentForPackage(packageName)
-            val pending=PendingIntent.getActivity(this,0,open,
+            val pending=PendingIntent.getActivity(this,0,open ?: Intent(this, MainActivity::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val notification=Notification.Builder(this,CHANNEL)
                 .setContentTitle("USKORUN is recording location")
@@ -107,7 +107,7 @@ class USKLocationService:Service(),LocationListener {
         if(subscribed){manager.removeUpdates(this);subscribed=false}
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.N)
             stopForeground(STOP_FOREGROUND_REMOVE)
-        else @Suppress("DEPRECATION") stopForeground(true)
+        else stopForeground(true)
         stopSelf()
     }
     override fun onDestroy(){
