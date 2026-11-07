@@ -81,11 +81,18 @@ if(existsSync(androidBase)){
   return s.replace(re,m=>m+"\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25'");
  });
  edit(join(androidBase,'app/build.gradle'),s=>{
-  if(s.includes("apply plugin: 'org.jetbrains.kotlin.android'"))return s;
-  if(!s.includes("apply plugin: 'com.android.application'"))
+  let next=s;
+  if(!next.includes("apply plugin: 'com.android.application'"))
    throw new Error('Expected app/build.gradle layout not found');
-  return s.replace("apply plugin: 'com.android.application'",
-   "apply plugin: 'com.android.application'\napply plugin: 'org.jetbrains.kotlin.android'");
+  if(!next.includes("apply plugin: 'org.jetbrains.kotlin.android'"))
+   next=next.replace("apply plugin: 'com.android.application'",
+    "apply plugin: 'com.android.application'\napply plugin: 'org.jetbrains.kotlin.android'");
+  if(!next.includes('kotlinOptions {')){
+   const block=/android\s*\{/;
+   if(!block.test(next))throw new Error('Expected Android Gradle configuration missing');
+   next=next.replace(block,m=>m+"\n    kotlinOptions { jvmTarget = '21' }");
+  }
+  return next;
  });
  console.log('Android owned Kotlin service and Capacitor bridge linked. Check merged manifest in Android Studio.');
 }
