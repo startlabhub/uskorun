@@ -40,7 +40,7 @@ if(existsSync(iosBase)){
 const androidBase=join(root,'android');
 if(existsSync(androidBase)){
  const code=join(androidBase,'app/src/main/java/com/uskorun/app');
- for(const file of ['USKDurableStore.kt','USKLocationService.kt','USKDurableLocationPlugin.kt'])
+ for(const file of ['USKQueueCrypto.kt','USKDurableStore.kt','USKLocationService.kt','USKDurableLocationPlugin.kt'])
   copy(join(src,'android',file),join(code,file));
  const javaMain=join(code,'MainActivity.java'),ktMain=join(code,'MainActivity.kt');
  if(existsSync(javaMain)){
