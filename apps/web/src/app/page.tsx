@@ -7,8 +7,10 @@ import type {PendingRun} from "@/domain/pending";
 import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-handoff";
 import {ForegroundWatch,browserWatchClock,blurEditingFocus} from "@/domain/foreground-watch";
 import type {PositionSample} from "@/domain/foreground-watch";
-import {NativeGPSWatch} from "@/domain/native-watch";
-import {nativeGPSAvailable,createNativeGPSWatch,ensureNativeBackgroundPrerequisites} from "@/domain/gps-platform";
+import {nativeGPSAvailable,ensureNativeBackgroundPrerequisites} from "@/domain/gps-platform";
+import {durableGPSPort} from "@/domain/durable-gps-platform";
+import type {NativeDiskPort} from "@/domain/native-disk-queue";
+import {nativeResumeKind,syncNativeQueue} from "@/domain/native-disk-queue";
 import {apiFetch,NATIVE_LOCAL_QA} from "@/domain/api-client";
 import {preliminaryActivityPoints,preliminaryPointsNote,remainingConfirmedPoints,canClaimDemoOffer,nextDemoReward,selectedJoinedGoal} from "@/domain/experience";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
@@ -31,7 +33,11 @@ export default function Home(){
  const [teamName,setTeamName]=useState(""),[teamCode,setTeamCode]=useState(""),[redeemCode,setRedeemCode]=useState("");
  const [partnerStats,setPartnerStats]=useState<PartnerStats[]|null>(null),[partnerRefresh,setPartnerRefresh]=useState(0);
  const points=useRef<GPSPoint[]>([]),activity=useRef<string|null>(null),wake=useRef<any>(null);
- const watcher=useRef<ForegroundWatch|null>(null),nativeWatcher=useRef<NativeGPSWatch|null>(null),wakeEpoch=useRef(0);
+ const watcher=useRef<ForegroundWatch|null>(null),wakeEpoch=useRef(0);
+ const nativePort=useRef<NativeDiskPort|null>(null);
+ const nativeActive=useRef(false),nativeSync=useRef<Promise<void>|null>(null);
+ const nativePoll=useRef<ReturnType<typeof setInterval>|null>(null);
+ const pausing=useRef(false);
  const [nativeConsent,setNativeConsent]=useState(false);
  const [nativeMode,setNativeMode]=useState(false);
  useEffect(()=>{setNativeMode(nativeGPSAvailable())},[]);
@@ -124,7 +130,9 @@ export default function Home(){
  }
  const geoloc=(navigatorAvailable:boolean)=>navigatorAvailable&&"geolocation" in navigator;
  function clearWatch(){
-  watcher.current?.stop();nativeWatcher.current?.stop();
+  // Do not stop OS recording on WebView unload / React unmount.
+  // Only explicit Pause, Finish, Abandon stop the native service.
+  watcher.current?.stop();
   wakeEpoch.current++;
   void wake.current?.release?.().catch?.(()=>{});
   wake.current=null;
@@ -183,7 +191,7 @@ export default function Home(){
   if(existing?.phase==='recording'){setProblem('Already recording. Tap Pause or Finish.');return}
   if(existing?.phase==='paused'){setProblem('A saved activity is paused. Use Resume, Finish, or Abandon; do not start a new activity.');setTab('track');return}
   if(existing?.phase==='pending_finish'){setProblem('Finish has not been confirmed. Retry Finish or Abandon first.');setTab('track');return}
-  if(watcher.current?.isRunning||nativeWatcher.current?.isRunning||tracking){setProblem('GPS recording already active');return}
+  if(watcher.current?.isRunning||nativeActive.current||tracking){setProblem('GPS recording already active');return}
   if(nativeGPSAvailable()&&!nativeConsent){
    setNativeConsent(true);
    setGpsNote('Before GPS permission: USKORUN requests phone location while walking/running, including screen lock and incoming calls. iOS Always location and Android background location / persistent notification may be needed. Tap Start again to confirm.');
@@ -213,7 +221,7 @@ export default function Home(){
   const d=draftRef.current;
   if(busyRef.current){setProblem('An action is still processing; Resume is unavailable.');return}
   if(!d||!d.activityId||d.phase!=='paused'){setProblem('Resume requires a saved paused activity with a server or local QA ID.');return}
-  if(watcher.current?.isRunning||nativeWatcher.current?.isRunning){setProblem('GPS is already recording.');return}
+  if(watcher.current?.isRunning||nativeActive.current){setProblem('GPS is already recording.');return}
   const next=withResume(d);saveDraft(next);setTracking(true);setPaused(false);
   setGpsNote('Reconnecting GPS in a new segment; missed distance is not counted…');observe();
  }
