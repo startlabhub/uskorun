@@ -249,3 +249,17 @@
 ## NATIVE-02a — Исправления TypeScript после независимого QA (07.11.2026, 11:56 PST)
 
 - По отчёту Instinct на exact SHA `41323f409eb706ddaf4b962f7a96fd08b073cf4a`: `npm test` 80/80 PASS, но `tsc --noEmit` и `npm run build` FAIL по трём ошибкам типов; исправлены nullable `activityId` перед `reset` и `ack` (при отсутствии ID очередь не подтверждается и остаётся на диске), а также полный мок `NativeDiskPort` в unit-тесте; добавлен regression test отсутствующего ID. Кодовые фиксы: `58e592f68b9f23b9f3e3381734aaeac602d9d17d`, `438184538433b833a46858ad66a098ed9a99cdc1`, `ebe561247ad94948504506876b9aacf416c10b89`, `01ad422544a623fbbfbd878057cbba615db87146`. Полная сборка нового SHA и physical/native QA ещё НЕ подтверждены; без деплоя, PR, merge и изменений Railway/БД.
+
+## NATIVE-03 — Independent Android native compile evidence (Ledger only)
+
+- **Дата:** 07.11.2026, PST (America/Los_Angeles).
+- **Источник и provenance:** независимый локальный отчёт **Instinct** на **exact code SHA `9d9434540c045939ca321cd7755c6d1da728a62c`**. Результаты ниже получены оператором; автор этой записи **не запускал** Android build, не инспектировал APK самостоятельно и не вносил изменений в код.
+- **Среда сборки:** Temurin **JDK 21.0.13**, Android SDK **platform-35** + **build-tools 35.0.0**, Gradle wrapper **8.11.1**.
+- **Команды/шаги оператора:** `npx cap add ios`, `npx cap add android`, `scripts/configure-native.mjs`, `scripts/install-durable-location.mjs`, затем `cd android && ./gradlew assembleDebug`.
+- **Результат:** **BUILD SUCCESSFUL**, **169 tasks**; артефакт `app-debug.apk`, размер **5.0 MB**. Для успешной Android-компиляции **не потребовалось изменений исходного кода**.
+- **Проверка APK по отчёту Instinct:** в DEX присутствуют `com.uskorun.app.USKDurableLocationPlugin`, `USKLocationService`, `USKDurableStore`, `USKRun`, `USKRecord`; упаковано **29 web assets**, включая `assets/public/index.html`.
+- **Merged AndroidManifest (проверен оператором):** `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `POST_NOTIFICATIONS`, `INTERNET`, `RECEIVE_BOOT_COMPLETED`. Сервис `USKLocationService` объявлен с `foregroundServiceType=location`, `stopWithTask=false`. Наличие в APK/manifest **не означает**, что runtime GPS/service/background recovery уже проверены.
+- **Честные открытые release-гейты:** iOS Swift-код **НЕ компилировался** (нет macOS/Xcode); **физический QA устройств НЕ выполнен** (звонок, блокировка, 10 минут в фоне, kill/relaunch, батарея, сохранение очереди и отсутствие двойных начислений); Android runtime, permission flows и App Store/Play compliance остаются непроверенными. Упакованное offline-приложение использует **LOCAL QA API contract**: без настоящего server login, серверного Finish и подтверждённых points/awards. Реальная API-интеграция потребует **отдельно одобренной remote-URL сборки**, работающего сервера и самостоятельной приёмки. Privacy/шифрование GPS-хранилища также остаётся открытым гейтом.
+- **Граница этой записи:** **ТОЛЬКО append к `docs/ledger/operations.md`** в `feat/native-background-gps`. Без изменений кода, `main`, `feat/mvp-foundation-gps`, Railway/staging, БД, ресурсов и секретов; **без PR, merge, deploy, магазинов и платежей**.
+
+**Статус NATIVE-03:** Android **compile/package verified by Instinct** на указанном SHA; **iOS compilation, physical/runtime QA, production API integration и release approval остаются OPEN**.
