@@ -137,6 +137,49 @@ export default function Home(){
   void wake.current?.release?.().catch?.(()=>{});
   wake.current=null;
  }
+ /** Drain real OS fixes. Persist full PendingRun before ACKing any native seq. */
+ async function syncNativePoints():Promise<void>{
+  if(!nativeGPSAvailable())return;
+  const run=draftRef.current;
+  if(!run?.activityId)return;
+  if(nativeSync.current)return nativeSync.current;
+  const port=nativePort.current??durableGPSPort();
+  nativePort.current=port;
+  const task=(async()=>{
+   try{
+    const result=await syncNativeQueue(port,run,updated=>{
+     // Strict write — if quota/IO fails, do not acknowledge OS records.
+     writePendingRun(localStorage,updated);
+     draftRef.current=updated;setPendingRecovery(updated);
+     points.current=updated.points;setFixCount(updated.points.length);
+    });
+    if(result.accepted>0){
+     const track=assessGPS(result.draft.points,result.draft.kind,
+      result.draft.points[0].t-1000,Date.now()+1000);
+     setLiveMiles(track.miles);
+     setGpsNote('Native disk: '+result.draft.points.length+' real GPS fixes saved; credits only after server Finish');
+    }
+    if(result.overflow||result.remaining)
+     throw new Error('Native GPS queue is full or not fully drained; do not submit Finish.');
+   }catch(e){
+    const message='Durable GPS sync blocked: '+String(e instanceof Error?e.message:e);
+    setProblem(message);
+    throw e;
+   }
+  })();
+  nativeSync.current=task;
+  try{await task}finally{nativeSync.current=null}
+ }
+ function startNativePoll(){
+  if(nativePoll.current!==null)return;
+  nativePoll.current=setInterval(()=>{
+   if(document.visibilityState==='visible'&&draftRef.current?.activityId)
+    void syncNativePoints().catch(()=>{});
+  },2000);
+ }
+ function stopNativePoll(){
+  if(nativePoll.current!==null){clearInterval(nativePoll.current);nativePoll.current=null}
+ }
  function onPosition({coords,timestamp}:PositionSample){
   const d=draftRef.current;
   if(d?.phase!=='recording')return;
