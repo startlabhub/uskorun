@@ -245,3 +245,7 @@
 - **Строгая граница:** **никаких deploy, PR, merge, Railway, изменений main/feat/mvp-foundation-gps, миграций, оплат, регистраций и новых инфраструктурных ресурсов**. Staging остаётся выключенным, нативные app binaries и релиз не утверждены.
 
 **Статус NATIVE-02: REVIEW / КОД И СХЕМА ОЧЕРЕДИ ПОДГОТОВЛЕНЫ; BUILD, NATIVE COMPILATION, PHYSICAL QA И PRIVACY RELEASE GATES — ОТКРЫТЫ.**
+
+## NATIVE-02a — Исправления TypeScript после независимого QA (07.11.2026, 11:56 PST)
+
+- По отчёту Instinct на exact SHA `41323f409eb706ddaf4b962f7a96fd08b073cf4a`: `npm test` 80/80 PASS, но `tsc --noEmit` и `npm run build` FAIL по трём ошибкам типов; исправлены nullable `activityId` перед `reset` и `ack` (при отсутствии ID очередь не подтверждается и остаётся на диске), а также полный мок `NativeDiskPort` в unit-тесте; добавлен regression test отсутствующего ID. Кодовые фиксы: `58e592f68b9f23b9f3e3381734aaeac602d9d17d`, `438184538433b833a46858ad66a098ed9a99cdc1`, `ebe561247ad94948504506876b9aacf416c10b89`, `01ad422544a623fbbfbd878057cbba615db87146`. Полная сборка нового SHA и physical/native QA ещё НЕ подтверждены; без деплоя, PR, merge и изменений Railway/БД.
