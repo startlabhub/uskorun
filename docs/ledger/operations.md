@@ -209,3 +209,20 @@
 ### Итог и границы
 
 **Статус OPS-006: ОСТАНОВКА ВЫПОЛНЕНА ПО ОТЧЁТУ ОПЕРАТОРА.** Оба staging deployment'а offline около **10:17:50 PST 07.11.2026**, до предельного **~10:20 PST**; окно не продлевалось. Данные и том сохранены. Финальные начисления Railway и первопричина проблемы Run остаются **неподтверждёнными**. При внесении записи изменена **только документация Ledger** в отдельной review-ветке; код, Railway, БД, ресурсы, настройки, секреты и billing не изменялись.
+
+---
+
+## NATIVE-01 — Capacitor background GPS implementation, isolated feature review
+
+- **Дата:** 07.11.2026; PST (America/Los_Angeles).
+- **Основание:** прямое решение Ильи «Переделывай на GPS телефона как и хотели» и последующее разрешение Instinct коммитить **ТОЛЬКО** в новую неподключённую ветку `feat/native-background-gps` после отдельной проверки Railway.
+- **Ветка и база:** `feat/native-background-gps`, создана от commit `e80a9efa67b83123c9739a4da8e5ad89d9d80870` (исходная проверенная web-логика + Ledger OPS-001–006). Feature HEAD до внесения этой записи: `ed2ecf8d32357f38369f982d80db5edbcac53aae`. SHA самого ledger-коммита определяется GitHub после его создания и не может быть заранее включён в собственное содержимое.
+- **Объём кода:** Capacitor 7 конфигурация для локального offline static export существующей Next.js UI; `@capacitor-community/background-geolocation@1.2.26` (MIT) только для iOS/Android; браузер сохраняет `ForegroundWatch`. Все координаты идут в существующий `PendingRun` с прежними `clientId`/`activityId`, сегментами и `/api/action` start/finish. `assessGPS`, 5-мильный лимит, ledger начислений и база данных **не изменены**.
+- **Устойчивость UI/API:** 15-секундный AbortController timeout, защитные сообщения при заблокированном Start/Resume/Finish, сохранённый kind, объяснение разрешений до Start. Локальный QA-стаб не создаёт аккаунтов, баллов и наград; offline Finish остаётся `pending_finish` и требует действительного серверного подтверждения.
+- **Нативные разрешения и лицензии:** iOS шаблон/патчер `Info.plist` (When In Use, Always, `UIBackgroundModes/location`), Android fine/background location, foreground service + постоянное уведомление и запрос Android notification permission. Экран `About → Licenses` содержит полные MIT-тексты James Diacono и Drifty Co.; генератор дополнительных уведомлений из установленного дерева npm.
+- **Документация:** `docs/GPS-02-NATIVE-QA.md` — звонок, блокировка, фон 10 минут, offline Finish/retry, 5-мильный лимит, батарея и требования магазинов; ни один физический сценарий пока **НЕ ПРОВЕРЕН**.
+- **Локальное тестирование в текущей среде:** изолированная копия native/pending/GPS/API модулей, **30/30 Node 22 unit PASS**, строгая изолированная проверка TypeScript `tsc --noEmit` **PASS**. Это **не** полная проверка файлов exact GitHub SHA. Полный `npm test`, `npm run typecheck`, `npm run build` Next и `npm run build:native` — **НЕ ПРОШЛИ ПРИЁМКУ / НЕ ПОДТВЕРЖДЕНЫ**: локальное окружение не содержит Next.js/Capacitor и недоступен npm registry (offline install: ENOTCACHED; попытка запуска `next build`: `next: not found`). Нельзя объявлять build-ready до воспроизводимой сборки с зависимостями.
+- **Открытые гейты:** полноценные local npm install/build/typecheck/test exact SHA, iOS/Android SDK и подписанный binary, настоящий iPhone/Android GPS call/lock/background QA, WebView JS suspension и отсутствие durable native GPS queue, шифрование сохранённых GPS-точек, Android Play background-location review, Apple App Store background-location justification, список лицензий после npm install, отдельное разрешение на API integration и расходы/аккаунты магазинов.
+- **Граница:** **НИКАКОГО ДЕПЛОЯ, НИКАКОГО MERGE, PR, Railway, миграций БД, новых аккаунтов/ресурсов или расходов.** Исходные `main` и `feat/mvp-foundation-gps` не менялись. Staging остаётся offline. Любое дальнейшее опубликование требует нового отдельного решения владельца.
+
+**Статус NATIVE-01: код подготовлен в отдельной feature-ветке, изолированные тесты зелёные; полный build/physical QA остаются открытыми блокирующими гейтами.**
