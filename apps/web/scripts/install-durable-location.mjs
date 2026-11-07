@@ -48,24 +48,24 @@ if(existsSync(androidBase)){
    if(s.includes('registerPlugin(USKDurableLocationPlugin.class)'))return s;
    const re=/public\s+class\s+MainActivity\s+extends\s+BridgeActivity\s*\{/;
    if(!re.test(s))throw new Error('Unexpected Android MainActivity.java layout');
-   return s.replace(re,m=>m+\`
+   return s.replace(re,m=>m+`
     @Override public void onCreate(android.os.Bundle savedInstanceState) {
         registerPlugin(USKDurableLocationPlugin.class);
         super.onCreate(savedInstanceState);
     }
-\`);
+`);
   });
  }else if(existsSync(ktMain)){
   edit(ktMain,s=>{
    if(s.includes('registerPlugin(USKDurableLocationPlugin::class.java)'))return s;
    const re=/class\s+MainActivity\s*:\s*BridgeActivity\(\)\s*\{/;
    if(!re.test(s))throw new Error('Unexpected Android MainActivity.kt layout');
-   return s.replace(re,m=>m+\`
+   return s.replace(re,m=>m+`
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         registerPlugin(USKDurableLocationPlugin::class.java)
         super.onCreate(savedInstanceState)
     }
-\`);
+`);
   });
  }else throw new Error('MainActivity not found; manual Capacitor registration required');
  edit(join(androidBase,'app/src/main/AndroidManifest.xml'),s=>{
