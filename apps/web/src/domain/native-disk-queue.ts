@@ -13,7 +13,12 @@ export type NativeQueuedFix={
  seq:number;clientId:string;activityId:string;segment:number;
  lat:number;lon:number;accuracy:number;t:number
 };
-export type NativeDrain={records:NativeQueuedFix[];active:boolean;overflow:boolean};
+export type NativeDrain={
+ records:NativeQueuedFix[];active:boolean;overflow:boolean;
+ // Persistent warning after Android Keystore key loss / unreadable queue.
+ // iOS implementation may omit it; never treat it as a GPS fix.
+ loss?:string|null
+};
 export type NativeBegin={clientId:string;activityId:string;kind:'run'|'walk';segment:number};
 export type NativeDiskPort={
  begin:(options:NativeBegin)=>Promise<{active:boolean}>;
@@ -81,19 +86,26 @@ export function nativeResumeKind(run:PendingRun):NativeBegin{
 }
 
 export type NativeDiskSyncResult={
- draft:PendingRun;accepted:number;remaining:boolean;overflow:boolean;active:boolean
+ draft:PendingRun;accepted:number;remaining:boolean;overflow:boolean;active:boolean;
+ loss:string|null
 };
 export async function syncNativeQueue(
  port:NativeDiskPort,draft:PendingRun,
  persist:(updated:PendingRun)=>void
 ):Promise<NativeDiskSyncResult>{
- let current=draft,total=0,remaining=false,overflow=false,active=false;
+ let current=draft,total=0,remaining=false,overflow=false,active=false,loss:string|null=null;
  // Drain bounded pages. Infinite loops are forbidden on malformed native ports.
  for(let page=0;page<25;page++){
   const result=await port.drain({limit:NATIVE_DRAIN_LIMIT});
   overflow ||= result.overflow;
   active=result.active;
-  if(result.records.length===0)return {draft:current,accepted:total,remaining:false,overflow,active};
+  if(result.loss){
+   // Quarantined/cannot decrypt: do not merge or ACK an unknown partial
+   // route. JS must surface the loss and require explicit Abandon/restart.
+   loss=result.loss;
+   return {draft:current,accepted:total,remaining:false,overflow,active,loss};
+  }
+  if(result.records.length===0)return {draft:current,accepted:total,remaining:false,overflow,active,loss};
   if(result.records.length>NATIVE_DRAIN_LIMIT)throw new Error('Native drain exceeded limit');
   // An absent ID must never acknowledge or discard native-disk records.
   // Throwing before persist/ACK keeps the same records for a later retry.
@@ -105,8 +117,8 @@ export async function syncNativeQueue(
   persist(merged.draft);
   await port.ack({clientId:current.clientId,activityId,seqs:merged.ackSeqs});
   current=merged.draft;total+=merged.inserted;
-  if(result.records.length<NATIVE_DRAIN_LIMIT)return {draft:current,accepted:total,remaining:false,overflow,active};
+  if(result.records.length<NATIVE_DRAIN_LIMIT)return {draft:current,accepted:total,remaining:false,overflow,active,loss};
   remaining=true;
  }
- return {draft:current,accepted:total,remaining,overflow,active};
+ return {draft:current,accepted:total,remaining,overflow,active,loss};
 }
