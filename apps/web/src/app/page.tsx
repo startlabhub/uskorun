@@ -343,6 +343,7 @@ export default function Home(){
        !tracking?<button disabled={busy} className="btn" onClick={start}>▶ Start {kind}</button>:
        <><button disabled={busy} className="btn secondary" onClick={()=>pause()}>Ⅱ Pause</button><button disabled={busy} className="btn danger" onClick={stop}>■ Finish</button></>}
      </div>
+     {busy&&<p className="small muted" role="status" style={{textAlign:"center",marginTop:10}}>Request in progress. Controls are temporarily disabled; network requests time out after 15 seconds.</p>}
      <div className="line"/><div className="alert"><strong>{nativeMode?'Phone GPS · native background beta':'Foreground GPS · browser beta'}</strong><br/>{nativeMode?'Before granting permissions: USKORUN records your walking/running route even when the screen is locked or during a phone call, subject to operating-system restrictions. iOS may ask for Always location access; Android uses a persistent location notification. Updates are best-effort; if the app is killed, any missing distance cannot be reconstructed.':'Keep the browser visible and screen awake. Calls, tab switching, and locks interrupt web GPS; return and tap Resume.'} Raw GPS points are kept {nativeMode?'in this app’s local unencrypted storage until confirmed Finish or Abandon':'in this browser tab sessionStorage'} for failed Finish recovery. Server checks plausibility; GPS does not prove physical activity.</div>
     </div>
     <div className="section"><h2>How points work</h2></div>
