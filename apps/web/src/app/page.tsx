@@ -215,16 +215,27 @@ export default function Home(){
  }
  async function observe(){
   if(nativeGPSAvailable()){
-   try{await ensureNativeBackgroundPrerequisites()}catch(e){
-    pause(String(e instanceof Error?e.message:'Android notification permission unavailable'));
-    return;
+   try{
+    await ensureNativeBackgroundPrerequisites();
+    const draft=draftRef.current;
+    if(!draft)throw new Error('Missing native PendingRun');
+    const port=nativePort.current??durableGPSPort();
+    nativePort.current=port;
+    // One active session and segment on disk; no JS callback required.
+    await port.begin(nativeResumeKind(draft));
+    // If Finish/Pause happened while native permission dialog was shown,
+    // stop OS recording instead of silently resurrecting the watcher.
+    if(draftRef.current?.phase!=='recording'||draftRef.current?.activityId!==draft.activityId){
+     await port.pause();
+     return;
+    }
+    nativeActive.current=true;
+    startNativePoll();
+    await syncNativePoints();
+    setGpsNote('Phone GPS is writing real fixes to native disk before JS reads them.');
+   }catch(e){
+    await pause('Native GPS not started: '+String(e instanceof Error?e.message:e)+'. Resume after fixing permissions.');
    }
-   if(!nativeWatcher.current)nativeWatcher.current=createNativeGPSWatch(
-    onPosition,reason=>pause(reason)
-   );
-   const started=await nativeWatcher.current.start();
-   if(!started&&draftRef.current?.phase==='recording')
-    pause('Native GPS did not start. Check location permission and tap Resume.');
    return;
   }
   if(!geoloc(typeof navigator!=='undefined')){
