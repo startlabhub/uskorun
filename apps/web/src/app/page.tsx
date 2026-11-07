@@ -179,6 +179,14 @@ export default function Home(){
      setLiveMiles(track.miles);
      setGpsNote('Native disk: '+result.draft.points.length+' real GPS fixes saved; credits only after server Finish');
     }
+    if(!result.active&&!busyRef.current&&!pausing.current&&draftRef.current?.phase==='recording'){
+     // OS persisted state says no active recorder (e.g., permission/service lost).
+     // Never claim that GPS kept recording after a process restart.
+     nativeActive.current=false;stopNativePoll();
+     saveDraft(withPause(draftRef.current));
+     setTracking(false);setPaused(true);
+     setGpsNote('Native GPS service is inactive. Tap Resume to begin a new segment; lost distance is not credited.');
+    }
     if(result.overflow||result.remaining)
      throw new Error('Native GPS queue is full or not fully drained; do not submit Finish.');
    }catch(e){
