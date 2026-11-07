@@ -8,7 +8,7 @@ import {voucherFragment,parseAndScrubVoucherFragment} from "@/domain/voucher-han
 import {ForegroundWatch,browserWatchClock,blurEditingFocus} from "@/domain/foreground-watch";
 import type {PositionSample} from "@/domain/foreground-watch";
 import {NativeGPSWatch} from "@/domain/native-watch";
-import {nativeGPSAvailable,createNativeGPSWatch} from "@/domain/gps-platform";
+import {nativeGPSAvailable,createNativeGPSWatch,ensureNativeBackgroundPrerequisites} from "@/domain/gps-platform";
 import {apiFetch,NATIVE_LOCAL_QA} from "@/domain/api-client";
 import {preliminaryActivityPoints,preliminaryPointsNote,remainingConfirmedPoints,canClaimDemoOffer,nextDemoReward,selectedJoinedGoal} from "@/domain/experience";
 type User={id:string;email:string;role:"runner"|"admin"|"merchant"};
@@ -144,6 +144,10 @@ export default function Home(){
  }
  async function observe(){
   if(nativeGPSAvailable()){
+   try{await ensureNativeBackgroundPrerequisites()}catch(e){
+    pause(String(e instanceof Error?e.message:'Android notification permission unavailable'));
+    return;
+   }
    if(!nativeWatcher.current)nativeWatcher.current=createNativeGPSWatch(
     onPosition,reason=>pause(reason)
    );
