@@ -73,20 +73,36 @@ export default function Home(){
   const code=parseAndScrubVoucherFragment(window.location,window.history);
   if(code){setRedeemCode(code);setTab('merchant')}
   const old=readPendingRun(nativeGPSAvailable()?localStorage:sessionStorage);
-  if(old){const paused=old.phase==='recording'?withPause(old):old;
+  if(old){const paused=old.phase==='recording'&&!nativeGPSAvailable()?withPause(old):old;
    saveDraft(paused);activity.current=paused.activityId;points.current=paused.points;
    setKind(paused.kind);setFixCount(paused.points.length);
    if(paused.points.length>0){
     setLiveMiles(assessGPS(paused.points,paused.kind,paused.points[0].t-1000,Date.now()+1000).miles);
    }
-   setPaused(true);setTracking(false);setGpsNote('Previous run recovered. Resume, retry finish, or abandon.');
+   if(nativeGPSAvailable()&&paused.phase==='recording'){
+    nativePort.current=durableGPSPort();
+    nativeActive.current=true;setPaused(false);setTracking(true);
+    startNativePoll();
+    void syncNativePoints().catch(()=>{});
+    setGpsNote('Native OS route recorder restored; draining previously saved fixes. Confirm foreground-service indicator.');
+   }else{
+    setPaused(true);setTracking(false);
+    if(nativeGPSAvailable()&&paused.activityId){
+     nativePort.current=durableGPSPort();
+     void syncNativePoints().catch(()=>{});
+    }
+    setGpsNote('Previous activity recovered. Resume, retry Finish, or Abandon.');
+   }
    // A saved session must be visible immediately after reload; QR handoff takes priority.
    if(!code)setTab('track');
   }
   const onVisibility=()=>{
    // Capacitor's native watcher stays active across calls, lock and background.
    // Only the standard browser watcher pauses on hidden/pagehide.
-   if(nativeGPSAvailable())return;
+   if(nativeGPSAvailable()){
+    if(document.visibilityState==='visible')void syncNativePoints().catch(()=>{});
+    return;
+   }
    if(document.visibilityState==='hidden'&&draftRef.current?.phase==='recording'&&!watcher.current?.isRunning)
     pause('App hidden: recording interrupted. Return and tap Resume.');
    watcher.current?.visibilityChanged();
@@ -95,7 +111,10 @@ export default function Home(){
    if(!nativeGPSAvailable()&&draftRef.current?.phase==='recording')
     pause('App interrupted: return and tap Resume.');
   };
-  const onFocus=()=>{if(!nativeGPSAvailable())watcher.current?.focus()};
+  const onFocus=()=>{
+   if(nativeGPSAvailable())void syncNativePoints().catch(()=>{});
+   else watcher.current?.focus();
+  };
   document.addEventListener('visibilitychange',onVisibility);
   window.addEventListener('pagehide',onPageHide);
   window.addEventListener('focus',onFocus);
@@ -103,7 +122,8 @@ export default function Home(){
    document.removeEventListener('visibilitychange',onVisibility);
    window.removeEventListener('pagehide',onPageHide);
    window.removeEventListener('focus',onFocus);
-   clearWatch();
+   stopNativePoll();
+   clearWatch(); // OS service intentionally unaffected by WebView teardown.
   };
  },[]);
  useEffect(()=>{
