@@ -282,22 +282,46 @@ export default function Home(){
    if(r.status!=='recording'){saveDraft(null);setGpsNote('Session was already finalized.');return}
    const started=withStartedId(current,r.activityId);saveDraft(started);
    activity.current=started.activityId;points.current=started.points;
-   setLiveMiles(0);setFixCount(points.current.length);setTracking(true);setPaused(false);observe();
+   setLiveMiles(0);setFixCount(points.current.length);setTracking(true);setPaused(false);
+   await observe();
   }finally{busyRef.current=false;setBusy(false)}
  }
- function pause(reason='Paused — no movement recorded until resumed'){
-  clearWatch();const d=draftRef.current;
-  if(d?.phase==='recording')saveDraft(withPause(d));
-  setTracking(false);setPaused(true);setGpsNote(reason);
+ async function pause(reason='Paused — no movement recorded until resumed'){
+  if(pausing.current)return;
+  pausing.current=true;
+  clearWatch();
+  try{
+   if(nativeGPSAvailable()&&nativePort.current){
+    // Stop durable producer first, then persist/ACK all its existing samples.
+    await nativePort.current.pause();
+    nativeActive.current=false;stopNativePoll();
+    await syncNativePoints();
+   }
+  }catch(e){
+   setProblem('Native pause/drain failed; location queue remains on disk: '+String(e));
+  }finally{
+   const d=draftRef.current;
+   if(d?.phase==='recording')saveDraft(withPause(d));
+   setTracking(false);setPaused(true);setGpsNote(reason);
+   pausing.current=false;
+  }
  }
- function resume(){
+ async function resume(){
   blurEditingFocus(document.activeElement);
   const d=draftRef.current;
   if(busyRef.current){setProblem('An action is still processing; Resume is unavailable.');return}
-  if(!d||!d.activityId||d.phase!=='paused'){setProblem('Resume requires a saved paused activity with a server or local QA ID.');return}
+  if(!d||!d.activityId||d.phase!=='paused'){setProblem('Resume requires a paused activity with an ID.');return}
   if(watcher.current?.isRunning||nativeActive.current){setProblem('GPS is already recording.');return}
-  const next=withResume(d);saveDraft(next);setTracking(true);setPaused(false);
-  setGpsNote('Reconnecting GPS in a new segment; missed distance is not counted…');observe();
+  busyRef.current=true;setBusy(true);
+  try{
+   if(nativeGPSAvailable())await syncNativePoints(); // old segment first
+   const updated=draftRef.current??d;
+   const next=withResume(updated);saveDraft(next);
+   setTracking(true);setPaused(false);
+   setGpsNote('Reconnecting GPS in a new segment; missed distance is not counted…');
+   await observe();
+  }catch(e){setProblem('Resume blocked by native queue: '+String(e))}
+  finally{busyRef.current=false;setBusy(false)}
  }
  async function stop(){
   if(busyRef.current){setProblem('An action is in progress; Finish cannot start yet.');return}
