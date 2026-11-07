@@ -38,6 +38,7 @@ export default function Home(){
  const nativeActive=useRef(false),nativeSync=useRef<Promise<void>|null>(null);
  const nativePoll=useRef<ReturnType<typeof setInterval>|null>(null);
  const pausing=useRef(false);
+ const nativeQueueLost=useRef(false);
  const [nativeConsent,setNativeConsent]=useState(false);
  const [nativeMode,setNativeMode]=useState(false);
  useEffect(()=>{setNativeMode(nativeGPSAvailable())},[]);
@@ -173,6 +174,14 @@ export default function Home(){
      draftRef.current=updated;setPendingRecovery(updated);
      points.current=updated.points;setFixCount(updated.points.length);
     });
+    if(result.loss){
+     nativeQueueLost.current=true;
+     nativeActive.current=false;stopNativePoll();
+     if(draftRef.current?.phase==='recording')saveDraft(withPause(draftRef.current));
+     setTracking(false);setPaused(true);
+     setGpsNote('Some GPS fixes are unrecoverable. Prior native file was preserved for diagnostics. No points can be confirmed for this session. Use Abandon to start a new activity.');
+     throw new Error('Native GPS queue loss: '+result.loss);
+    }
     if(result.accepted>0){
      const track=assessGPS(result.draft.points,result.draft.kind,
       result.draft.points[0].t-1000,Date.now()+1000);
@@ -379,12 +388,18 @@ export default function Home(){
    }
    if(nativeGPSAvailable()&&nativePort.current){
     await nativePort.current.end();nativeActive.current=false;stopNativePoll();
-    await syncNativePoints();
+    // Key-loss quarantine is exceptional: there are no trustworthy fixes to
+    // ACK. Explicit Abandon may clear the lost session (native reset retains
+    // quarantined files) but Finish remains blocked.
+    try{await syncNativePoints()}catch(e){
+     if(!nativeQueueLost.current)throw e;
+    }
    }
    const result=await act('abandon',{activityId:id});
    if(!result)return;
    if(nativeGPSAvailable()&&nativePort.current && d.activityId)
     await nativePort.current.reset({clientId:d.clientId,activityId:d.activityId});
+   nativeQueueLost.current=false;
    clearWatch();saveDraft(null);activity.current=null;points.current=[];
    setTracking(false);setPaused(false);setNotice('Run closed with status: '+result.status);
   }catch(e){setProblem('Abandon not cleared; native route retained: '+String(e))}
