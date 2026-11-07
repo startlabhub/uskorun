@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Review template: scripts/configure-native.mjs patches the actual generated ios/App/App/Info.plist -->
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>USKORUN uses your phone location during a walk or run to estimate distance and demo points.</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>When you start a walk or run, USKORUN continues collecting route points while your phone is locked or you take a call. Demo points are only credited after server review.</string>
+  <key>UIBackgroundModes</key><array><string>location</string></array>
+</dict></plist>
