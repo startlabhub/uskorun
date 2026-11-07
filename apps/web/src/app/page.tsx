@@ -171,8 +171,18 @@ export default function Home(){
  }
  async function start(){
   blurEditingFocus(document.activeElement);
-  if(busyRef.current||watcher.current?.isRunning||tracking||draftRef.current?.phase==='pending_finish')return;
-  if(!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');return}
+  if(busyRef.current){setProblem('An action is still processing. Please wait for its result.');return}
+  const existing=draftRef.current;
+  if(existing?.phase==='recording'){setProblem('Already recording. Tap Pause or Finish.');return}
+  if(existing?.phase==='paused'){setProblem('A saved activity is paused. Use Resume, Finish, or Abandon; do not start a new activity.');setTab('track');return}
+  if(existing?.phase==='pending_finish'){setProblem('Finish has not been confirmed. Retry Finish or Abandon first.');setTab('track');return}
+  if(watcher.current?.isRunning||nativeWatcher.current?.isRunning||tracking){setProblem('GPS recording already active');return}
+  if(nativeGPSAvailable()&&!nativeConsent){
+   setNativeConsent(true);
+   setGpsNote('Before GPS permission: USKORUN requests phone location while walking/running, including screen lock and incoming calls. iOS Always location and Android background location / persistent notification may be needed. Tap Start again to confirm.');
+   return;
+  }
+  if(!nativeGPSAvailable()&&!geoloc(typeof navigator!=='undefined')){setProblem('GPS unavailable');return}
   busyRef.current=true;setBusy(true);
   try{
    // Reuse the SAME clientId if start previously timed out after being accepted by server.
@@ -194,12 +204,14 @@ export default function Home(){
  function resume(){
   blurEditingFocus(document.activeElement);
   const d=draftRef.current;
-  if(!d||!d.activityId||d.phase!=='paused'||busyRef.current||watcher.current?.isRunning)return;
+  if(busyRef.current){setProblem('An action is still processing; Resume is unavailable.');return}
+  if(!d||!d.activityId||d.phase!=='paused'){setProblem('Resume requires a saved paused activity with a server or local QA ID.');return}
+  if(watcher.current?.isRunning||nativeWatcher.current?.isRunning){setProblem('GPS is already recording.');return}
   const next=withResume(d);saveDraft(next);setTracking(true);setPaused(false);
   setGpsNote('Reconnecting GPS in a new segment; missed distance is not counted…');observe();
  }
  async function stop(){
-  if(busyRef.current)return;
+  if(busyRef.current){setProblem('An action is in progress; Finish cannot start yet.');return}
   clearWatch();setTracking(false);setPaused(true);
   const d=draftRef.current;if(!d?.activityId){setGpsNote('Retry Start first to recover server ID');return}
   const frozen=withPendingFinish(d);saveDraft(frozen);
@@ -215,7 +227,9 @@ export default function Home(){
   }finally{busyRef.current=false;setBusy(false)}
  }
  async function abandon(){
-  const d=draftRef.current;if(!d||busyRef.current)return;
+  const d=draftRef.current;
+  if(!d){setProblem('No saved activity to abandon.');return}
+  if(busyRef.current){setProblem('Wait for the current action before abandoning.');return}
   busyRef.current=true;setBusy(true);
   try{
    // If first start response was lost, replay exact clientId to recover server ID.
