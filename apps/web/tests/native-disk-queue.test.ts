@@ -93,3 +93,33 @@ test('missing activityId leaves all native disk records unacknowledged',async()=
  assert.deepEqual(disk.acks,[]);
  assert.equal(disk.records.length,1);
 });
+
+test('quarantined Android GPS queue surfaces loss but never ACKs or changes saved route',async()=>{
+ const disk=new Disk();
+ disk.records=[fix(1,1000)];
+ let wrote=false;
+ const port:NativeDiskPort={
+  begin:()=>disk.begin(),pause:()=>disk.pause(),end:()=>disk.end(),
+  reset:()=>disk.reset(),
+  ack:args=>disk.ack(args),
+  drain:async({limit})=>({...await disk.drain({limit}),
+   active:false,loss:'Keystore key missing; old GPS ciphertext preserved'})
+ };
+ const initial=session();
+ const result=await syncNativeQueue(port,initial,()=>{wrote=true});
+ assert.match(result.loss||'',/Keystore key missing/);
+ assert.deepEqual(result.draft,initial);
+ assert.equal(result.accepted,0);
+ assert.equal(result.active,false);
+ assert.equal(wrote,false);
+ assert.equal(disk.acks.length,0);
+ assert.equal(disk.records.length,1);
+});
+
+test('a normal legacy iOS/native drain without loss flag remains compatible',async()=>{
+ const disk=new Disk();disk.records=[fix(1,1000)];
+ const result=await syncNativeQueue(disk,session(),()=>{});
+ assert.equal(result.loss,null);
+ assert.equal(result.accepted,1);
+ assert.equal(disk.records.length,0);
+});
