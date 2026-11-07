@@ -9,7 +9,11 @@
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "migrate": "tsx scripts/migrate.ts",
     "test": "tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:native": "node scripts/build-native.mjs",
+    "native:platforms": "npx cap add ios && npx cap add android && node scripts/configure-native.mjs",
+    "native:sync": "npm run build:native && npx cap sync && node scripts/configure-native.mjs",
+    "licenses:generate": "node scripts/generate-native-licenses.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
@@ -17,7 +21,11 @@
     "react-dom": "^19.1.0",
     "pg": "^8.16.0",
     "zod": "^4.1.0",
-    "qrcode.react": "^4.2.0"
+    "qrcode.react": "^4.2.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor-community/background-geolocation": "1.2.26",
+    "@capacitor/local-notifications": "^7.0.0",
+    "@capacitor/app": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
@@ -25,6 +33,9 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "typescript": "^5.9.0",
-    "tsx": "^4.20.0"
+    "tsx": "^4.20.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/android": "^7.0.0"
   }
 }
