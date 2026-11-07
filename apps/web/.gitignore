@@ -3,3 +3,9 @@ node_modules/
 .env*
 !.env.example
 *.tsbuildinfo
+native-dist/
+ios/Pods/
+ios/App/App/public/
+android/.gradle/
+android/build/
+android/app/build/
