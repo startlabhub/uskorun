@@ -226,7 +226,7 @@ export default function Home(){
   try{
    const r=await act('finish',{activityId:frozen.activityId,points:frozen.points});
    if(!r||!['accepted','rejected','review','abandoned'].includes(r.status)){
-    setGpsNote('Finish not confirmed. GPS data saved in this tab — Retry Finish.');return;
+    setGpsNote('Finish not confirmed. GPS data saved locally — Retry Finish. Native QA does not award points without a server.');return;
    }
    saveDraft(null);points.current=[];activity.current=null;
    setNotice(r.status==='accepted'?`Recorded ${mi(r.miles)} mi.`:`Session not credited: ${r.reason}`);
