@@ -54,5 +54,13 @@ export function localQARequest(path:string,init?:RequestInit):Response{
 export async function apiFetch(path:string,init:RequestInit={},timeoutMs=ACTION_TIMEOUT_MS,
  fetcher:Fetcher=fetch):Promise<Response>{
  if(NATIVE_LOCAL_QA)return localQARequest(path,init);
+ // Local test IDs must NEVER be interpreted as real server-side activities
+ // when someone later switches the shell from offline to an approved host.
+ if(path==='/api/action'&&init.method==='POST'){
+  let b:Record<string,unknown>={};
+  try{b=JSON.parse(String(init.body||'{}'))}catch{}
+  if(typeof b.activityId==='string'&&b.activityId.startsWith('local-qa:'))
+   throw new Error('Local QA recording cannot be sent to a real server. Abandon it locally before changing API mode.');
+ }
  return boundedFetch(path,init,timeoutMs,fetcher);
 }
